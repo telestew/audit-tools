@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Clipboard Uppercaser",
+  "version": "1.2",
+  "permissions": ["scripting", "activeTab", "clipboardRead", "clipboardWrite"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "commands": {
+    "number_change": {
+      "suggested_key": {
+        "default": "Alt+O"
+      },
+      "description": "Convert clipboard text to uppercase"
+    }
+  }
+}
