@@ -1,33 +1,33 @@
 {
-  "manifest_version": 3,
-  "name": "Clipboard URL Opener",
-  "version": "1.4",
-  "description": "Open clipboard URLs using keyboard shortcuts",
-  "permissions": ["tabs", "scripting", "storage"],
-  "background": {
-    "service_worker": "background.js"
-  },
-  "commands": {
-    "lookup_task": {
-      "suggested_key": {
-        "default": "Alt+L"
-      },
-      "description": "Looks up task by ID"
-    },
-    "lookup_project": {
-      "suggested_key": {
-        "default": "Alt+K"
-      },
-      "description": "Looks up a project by ID"
-    }
-  },
-  "host_permissions": ["<all_urls>"],
-  "action": {
-    "default_popup": "popup.html",
-    "default_icon": {
-      "16": "icon.png",
-      "48": "icon.png",
-      "128": "icon.png"
-    }
-  }
+	"manifest_version": 3,
+	"name": "Clipboard URL Opener",
+	"version": "1.4",
+	"description": "Open clipboard URLs using keyboard shortcuts",
+	"permissions": ["tabs", "scripting", "storage"],
+	"background": {
+		"service_worker": "background.js"
+	},
+	"commands": {
+		"lookup_task": {
+			"suggested_key": {
+				"default": "Alt+L"
+			},
+			"description": "Looks up task by ID"
+		},
+		"lookup_project": {
+			"suggested_key": {
+				"default": "Alt+K"
+			},
+			"description": "Looks up a project by ID"
+		}
+	},
+	"host_permissions": ["<all_urls>"],
+	"action": {
+		"default_popup": "popup.html",
+		"default_icon": {
+			"16": "icon.png",
+			"48": "icon.png",
+			"128": "icon.png"
+		}
+	}
 }

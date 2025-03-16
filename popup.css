@@ -67,6 +67,33 @@ input[type="checkbox"]:checked + .toggle-slider::before {
     margin-left: 10px;
 }
 
+/* Dropdown Menu */
+label[for="lookupMode"] {
+    font-size: 14px;
+    margin-top: 15px;
+    display: block;
+    color: #555;
+}
+
+select {
+    width: 100%;
+    padding: 8px;
+    margin-top: 5px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    background: #f8f8f8;
+    font-size: 14px;
+    outline: none;
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+select:focus {
+    border-color: #888;
+    background: #f0f0f0;
+}
+
+/* Button Styling */
 button {
     width: 100%;
     padding: 10px;
