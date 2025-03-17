@@ -3,24 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Clipboard Opener</title>
+    <title>Audit Tools</title>
     <link rel="stylesheet" href="popup.css">
 </head>
 <body>
     <div class="container">
-        <h3>Clipboard Opener</h3>
-
-        <label class="toggle-container">
-            <input type="checkbox" id="projectEnabled">
-            <span class="toggle-slider"></span>
-            <span class="toggle-label">Enable Project Lookup</span>
-        </label>
+        <h3>Audit Tools</h3>
 
         <label for="lookupMode">Lookup Mode:</label>
         <select id="lookupMode">
             <option value="clipboard">From Clipboard</option>
             <option value="highlighted">From Highlighted Text</option>
         </select>
+
+        <label class="toggle-container">
+            <input type="checkbox" id="projectEnabled">
+            <span class="toggle-slider"></span>
+            <span class="toggle-label">Enable Project Lookup</span>
+        </label>
 
         <button id="save">Save</button>
     </div>
