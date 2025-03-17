@@ -1,6 +1,6 @@
 chrome.runtime.onInstalled.addListener(() => {
 	chrome.storage.sync.get(["projectEnabled", "lookupMode"], (data) => {
-		if (data.projectEnabled === undefined) chrome.storage.sync.set({ projectEnabled: true });
+		if (data.projectEnabled === undefined) chrome.storage.sync.set({ projectEnabled: false });
 		if (!data.lookupMode) chrome.storage.sync.set({ lookupMode: "highlighted" });
 	});
 });

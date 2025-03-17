@@ -1,8 +1,8 @@
 {
 	"manifest_version": 3,
-	"name": "Clipboard URL Opener",
+	"name": "Audit Tools",
 	"version": "1.4",
-	"description": "Open clipboard URLs using keyboard shortcuts",
+	"description": "Open URLs in Outlier using keyboard shortcuts",
 	"permissions": ["tabs", "scripting", "storage"],
 	"background": {
 		"service_worker": "background.js"
@@ -12,13 +12,13 @@
 			"suggested_key": {
 				"default": "Alt+L"
 			},
-			"description": "Looks up task by ID"
+			"description": "Looks up task in Outlier by ID"
 		},
 		"lookup_project": {
 			"suggested_key": {
 				"default": "Alt+K"
 			},
-			"description": "Looks up a project by ID"
+			"description": "Looks up a project in OpsHub by ID"
 		}
 	},
 	"host_permissions": ["<all_urls>"],

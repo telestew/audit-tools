@@ -10,15 +10,15 @@
             text = getSelectedText();
         }
 
-        if (text.match(/[A-Za-z0-9]/g) && text.length === 20) {
-            window.open(`https://developer.mozilla.org/en-US/${text}`, "_blank");
+        if (text.match(/[A-Za-z0-9]/g) && text.length === 24) {
+            window.open(`https://app.outlier.ai/en/expert/outlieradmin/tools/qc_audit_disputes/${text}`, "_blank");
         } else {
             alert(`Not a valid ID: ${text}`);
         }
 
     } catch (err) {
-        console.error("Failed to read clipboard:", err);
-        alert("Error fetching text. Make sure you have something copied or highlighted.");
+        console.error("Failed to read ID:", err);
+        alert("Error fetching task. Make sure you have a valid ID copied or highlighted.");
     }
 })();
 
