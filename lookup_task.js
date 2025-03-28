@@ -11,7 +11,7 @@
         }
 
         if (text.match(/[A-Za-z0-9]/g) && text.length === 24) {
-            window.open(`https://app.outlier.ai/en/expert/outlieradmin/tools/lookup/${text}`, "_blank");
+            window.open(`https://app.outlier.ai/en/expert/outlieradmin/tools/lookup/${text}#View%20Responses`, "_blank");
         } else {
             alert(`Not a valid ID: ${text}`);
         }
