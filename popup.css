@@ -1,20 +1,33 @@
 body {
     font-family: Arial, sans-serif;
-    background: #f5f3eb; /* Cream background */
-    width: 200px;
+    background: #efefff; /* Light blue background */
+    width: 300px;
     padding: 15px;
     margin: 0;
-    color: #333;
-    text-align: center;
+    color: #222;
+    text-align: left;
+    line-height: 1.15;
 }
 
-.container {
+.centered {
     display: flex;
     flex-direction: column;
     align-items: center;
 }
 
+.settings {
+    display: flex;
+    flex-direction: column;
+    align-items: left;
+}
+
 h3 {
+    font-size: 1.8em;
+    margin-bottom: 10px;
+    color: #222;
+}
+
+h4 {
     font-size: 1.5em;
     margin-bottom: 10px;
     color: #222;
@@ -23,7 +36,7 @@ h3 {
 .toggle-container {
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: left;
     width: 100%;
     padding: 10px 0;
     position: relative;
@@ -71,15 +84,18 @@ input[type="checkbox"]:checked + .toggle-slider::before {
 /* Dropdown Menu */
 label[for="lookupMode"] {
     font-size: 14px;
-    margin-top: 15px;
+    margin-top: 25px;
+    margin-left: 25px;
     display: block;
-    color: #555;
+    color: #222;
 }
 
 select {
-    width: auto;
-    padding: 8px;
-    margin-top: 5px;
+    width: 12em;
+    white-space: nowrap;
+    padding: 6px;
+    margin-top: -10px;
+    margin-left: 55px;
     border: 1px solid #ccc;
     border-radius: 8px;
     background: #f8f8f8;
@@ -98,17 +114,17 @@ select:focus {
 button {
     width: 40%;
     padding: 10px;
-    margin-top: 15px;
-    background: #555;
+    margin-top: 25px;
+    background: #0078D4;
     color: white;
     border: none;
     border-radius: 8px;
     cursor: pointer;
-    font-size: 14px;
+    font-size: 16px;
     font-weight: bold;
     transition: 0.2s;
 }
 
 button:hover {
-    background: #444;
+    background: #004880;
 }

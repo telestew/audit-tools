@@ -7,21 +7,36 @@
     <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-    <div class="container">
+    <div class="centered">
         <h3>Audit Tools</h3>
+    </div>
 
-        <label for="lookupMode">Lookup Mode:</label>
-        <select id="lookupMode">
-            <option value="clipboard">From Clipboard</option>
-            <option value="highlighted">From Highlighted Text</option>
-        </select>
-
+    <div class="settings">
+        <h4>All auditors</h4>
         <label class="toggle-container">
-            <input type="checkbox" id="projectEnabled">
+            &emsp;&emsp;
+            <input type="checkbox" id="hideEnabled">
             <span class="toggle-slider"></span>
-            <span class="toggle-label">Enable Project Lookup</span>
+            <span class="toggle-label">Hide "External Feedback"</span>
         </label>
 
+        <label for="lookupMode">Lookup with &lt;Alt+L&gt;</label>
+            &emsp;&emsp;
+            <select id="lookupMode">
+                <option value="clipboard">from clipboard</option>
+                <option value="highlighted">from highlighted text</option>
+            </select>
+
+        <h4>Validators</h4>
+        <label class="toggle-container">
+            &emsp;&emsp;
+            <input type="checkbox" id="projectEnabled">
+            <span class="toggle-slider"></span>
+            <span class="toggle-label">Enable project lookup with &lt;Alt+K&gt;</span>
+        </label>
+    </div>
+
+    <div class="centered">
         <button id="save">Save</button>
     </div>
 
