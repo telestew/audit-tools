@@ -1,5 +1,3 @@
-
-
 (function() {
     // Function to hide target div 
     function hideTargetDiv() {
@@ -15,14 +13,24 @@
         }
     }
 
+    function makeAllSelectable() {
+        let elements = document.querySelectorAll('.select-none');
+    
+        for (element of elements) {
+            element.style.userSelect = 'text'; 
+        }
+    }
+
     // Run hide function once at load
     hideTargetDiv();
+    makeAllSelectable();
 
     // Set up a MutationObserver to watch for changes in the DOM.
     const observer = new MutationObserver((mutations) => {
         // For every mutation, attempt to hide the target div
         mutations.forEach(() => {
             hideTargetDiv();
+            if (chrome.storage.sync.get("selectabilityEnabled")) makeAllSelectable();
         });
     });
 
