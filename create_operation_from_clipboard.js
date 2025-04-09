@@ -80,10 +80,35 @@ async function sendPostRequest() {
         });
 
         if (response.ok) {
-            alert("Request sent successfully!");
+            confirm("Created operation successfully!\n\nClaim operation now?");
+            
+            const responseBody = await response.text();
+            const operationID = JSON.parse(responseBody)["operationIds"][1];
+            alert("Operation ID:"+operationID);
+            const claimRequestBody = {
+                "event": {
+                    "type": "claimAttempt",
+                    "userId": userID
+                }
+            };
+
+            const claimURL = "https://app.outlier.ai/corp-api/qm/operations/"+
+                              operationID+"/transition";
+            const claimResponse = await fetch(claimURL, {
+                method: 'POST',
+                headers: {
+                    "X-CSRF-Token": csrfToken,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(claimRequestBody)
+            });
+            location.reload();
+            
+            if (!claimResponse.ok) {
+                throw new Error('Claim operation failed:\n'+response.status+'\n'+response.statusText);
+            }
         } else {
-            console.error('Request failed:', response.status, response.statusText);
-            alert("Request failed: " + response.statusText);
+            throw new Error('Create operation failed:\n'+response.status+'\n'+response.statusText);
         }
     } catch (error) {
         console.error(error);
