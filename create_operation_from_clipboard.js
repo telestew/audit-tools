@@ -17,8 +17,8 @@ async function sendPostRequest() {
         const relatedIds = clipboardText.split('\n').filter(id => id.trim() !== '');
         
         // Calculate maxTimeRequired and dueDate
-        const MINUTES_PER_TASK = 12;
-        const maxTimeRequired = relatedIds.length * MINUTES_PER_TASK * 60; // 12 minutes per ID
+        const MINUTES_PER_TASK = 20;
+        const maxTimeRequired = relatedIds.length * MINUTES_PER_TASK * 60;
         const dueDate = new Date();
         dueDate.setDate(dueDate.getDate() + 1);
         const dueDateString = dueDate.toISOString();
@@ -27,13 +27,13 @@ async function sendPostRequest() {
         const csrfToken = await getCsrfToken();
 
         // Get user ID
-        const userID = localStorage.getItem("ajs_user_id")
+        const userID = localStorage.getItem("ajs_user_id").slice(1,25);
         
         // Get activeWorkerTeam ID
-        const activeWorkerTeam = JSON.parse(localStorage.getItem("ajs_user_traits"))["activeWorkerTeam"]
+        const activeWorkerTeam = JSON.parse(localStorage.getItem("ajs_user_traits"))["activeWorkerTeam"];
         
         // Get workerName for default task name
-        const workerName = JSON.parse(localStorage.getItem("ajs_user_traits"))["firstName"]
+        const workerName = JSON.parse(localStorage.getItem("ajs_user_traits"))["firstName"];
         
         // Prompt for the name
         const name = prompt("Enter the name for the operation:",workerName);
@@ -70,7 +70,7 @@ async function sendPostRequest() {
         };
         
         // Send the POST request
-        const response = await fetch('https://app.outlier.ai/corp-api/qm/operations/batch', {
+        let response = await fetch('https://app.outlier.ai/corp-api/qm/operations/batch', {
             method: 'POST',
             headers: {
                 "X-CSRF-Token": csrfToken,
@@ -79,21 +79,25 @@ async function sendPostRequest() {
             body: JSON.stringify(requestBody)
         });
 
-        if (response.ok) {
+        if (response.ok) {            
+            const responseBody = await response.json();
+
+            console.log(responseBody);
+            console.log(responseBody.operationIds);
+            console.log(responseBody.operationIds[0]);
+            const operationID = responseBody.operationIds[0];
+            
             confirm("Created operation successfully!\n\nClaim operation now?");
             
-            const responseBody = await response.text();
-            const operationID = JSON.parse(responseBody)["operationIds"][1];
-            alert("Operation ID:"+operationID);
             const claimRequestBody = {
                 "event": {
                     "type": "claimAttempt",
                     "userId": userID
                 }
             };
-
-            const claimURL = "https://app.outlier.ai/corp-api/qm/operations/"+
-                              operationID+"/transition";
+            console.log(JSON.stringify(claimRequestBody));
+            console.log(userID);
+            const claimURL = "https://app.outlier.ai/corp-api/qm/operations/"+operationID+"/transition";
             const claimResponse = await fetch(claimURL, {
                 method: 'POST',
                 headers: {
@@ -102,9 +106,17 @@ async function sendPostRequest() {
                 },
                 body: JSON.stringify(claimRequestBody)
             });
-            location.reload();
             
-            if (!claimResponse.ok) {
+            if (claimResponse.ok) {
+                const claimResponseBody = await claimResponse.json();
+                if (claimResponseBody.operation.stateMachine.currentState == "attempt_claimed") {
+                    const operationId = claimResponseBody.operation._id;
+                    const relatedObjectId = claimResponseBody.nodes[0].qaOperation.relatedObjectId;
+                    open("https://app.outlier.ai/en/expert/outlieradmin/tools/chat_bulk_audit/"+relatedObjectId+"?closeOnComplete=1&qaOperationId="+operationId,"_blank","toolbar=0, location=0, menubar=0, addressbar=0");
+                } else {
+                    throw new Error('Failed to claim operation.');
+                }    
+            } else {
                 throw new Error('Claim operation failed:\n'+response.status+'\n'+response.statusText);
             }
         } else {
