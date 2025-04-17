@@ -87,37 +87,37 @@ async function sendPostRequest() {
             console.log(responseBody.operationIds[0]);
             const operationID = responseBody.operationIds[0];
             
-            confirm("Created operation successfully!\n\nClaim operation now?");
-            
-            const claimRequestBody = {
-                "event": {
-                    "type": "claimAttempt",
-                    "userId": userID
-                }
-            };
-            console.log(JSON.stringify(claimRequestBody));
-            console.log(userID);
-            const claimURL = "https://app.outlier.ai/corp-api/qm/operations/"+operationID+"/transition";
-            const claimResponse = await fetch(claimURL, {
-                method: 'POST',
-                headers: {
-                    "X-CSRF-Token": csrfToken,
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify(claimRequestBody)
-            });
-            
-            if (claimResponse.ok) {
-                const claimResponseBody = await claimResponse.json();
-                if (claimResponseBody.operation.stateMachine.currentState == "attempt_claimed") {
-                    const operationId = claimResponseBody.operation._id;
-                    const relatedObjectId = claimResponseBody.nodes[0].qaOperation.relatedObjectId;
+            if (confirm("Created operation successfully!\n\nClaim operation now?")) {
+                const claimRequestBody = {
+                    "event": {
+                        "type": "claimAttempt",
+                        "userId": userID
+                    }
+                };
+                console.log(JSON.stringify(claimRequestBody));
+                console.log(userID);
+                const claimURL = "https://app.outlier.ai/corp-api/qm/operations/"+operationID+"/transition";
+                const claimResponse = await fetch(claimURL, {
+                    method: 'POST',
+                    headers: {
+                        "X-CSRF-Token": csrfToken,
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify(claimRequestBody)
+                });
+                
+                if (claimResponse.ok) {
+                    const claimResponseBody = await claimResponse.json();
+                    if (claimResponseBody.operation.stateMachine.currentState == "attempt_claimed") {
+                        const operationId = claimResponseBody.operation._id;
+                        const relatedObjectId = claimResponseBody.nodes[0].qaOperation.relatedObjectId;
                     open("https://app.outlier.ai/en/expert/outlieradmin/tools/chat_bulk_audit/"+relatedObjectId+"?closeOnComplete=1&qaOperationId="+operationId,"_blank","toolbar=0, location=0, menubar=0, addressbar=0");
+                    } else {
+                        throw new Error('Failed to claim operation.');
+                    }    
                 } else {
-                    throw new Error('Failed to claim operation.');
-                }    
-            } else {
-                throw new Error('Claim operation failed:\n'+response.status+'\n'+response.statusText);
+                    throw new Error('Claim operation failed:\n'+response.status+'\n'+response.statusText);
+                }
             }
         } else {
             throw new Error('Create operation failed:\n'+response.status+'\n'+response.statusText);
