@@ -9,7 +9,7 @@
         const grandparentDiv = result.singleNodeValue;
         if (grandparentDiv) {
             // Remove the grandparent <div>
-            grandparentDiv.style.display = chrome.storage.sync.get("hideEnabled") ? 'none' : ''; 
+            grandparentDiv.style.display = 'none'; 
         }
     }
 
@@ -29,7 +29,7 @@
     const observer = new MutationObserver((mutations) => {
         // For every mutation, attempt to hide the target div
         mutations.forEach(() => {
-            hideTargetDiv();
+            if (chrome.storage.sync.get("hideEnabled")) hideTargetDiv();
             if (chrome.storage.sync.get("selectabilityEnabled")) makeAllSelectable();
         });
     });
