@@ -29,7 +29,7 @@
     const observer = new MutationObserver((mutations) => {
         // For every mutation, attempt to hide the target div
         mutations.forEach(() => {
-            if (chrome.storage.syn.get("hideEnabled")) hideTargetDiv();
+            if (chrome.storage.sync.get("hideEnabled")) hideTargetDiv();
             if (chrome.storage.sync.get("selectabilityEnabled")) makeAllSelectable();
         });
     });
