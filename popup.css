@@ -90,6 +90,14 @@ label[for="lookupMode"] {
     color: #222;
 }
 
+label[for="projectDays"] {
+    font-size: 14px;
+    margin-top: 25px;
+    margin-left: 25px;
+    display: block;
+    color: #222;
+}
+
 select {
     width: 12em;
     white-space: nowrap;
