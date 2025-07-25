@@ -6,6 +6,7 @@
 
 ## For validators
 - Lookup project in OpsHub: `<ALT+K>` (or `<OPTION+K>` on Mac)
+- Adjust date range for project lookup in popup
 
 ## Credits
 - Original bash scripts by Samson Black, February 2025
