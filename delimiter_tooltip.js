@@ -1,5 +1,8 @@
-(function() {
-    if (!chrome.storage.sync.get("delimiterTooltipsEnabled")) return;
+(async function() {
+    const settings = await chrome.storage.sync.get();
+    console.log("settings",settings);
+
+    if (!settings.delimiterTooltipsEnabled) return;
     const cssText = `
         math-inline.math-node {
             position: relative;

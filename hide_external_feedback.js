@@ -1,4 +1,4 @@
-(function() {
+(async function() {
     // Function to hide target div 
     function hideTargetDiv() {
         // Use XPath to find the grandparent <div> of the <p> element with the exact text
@@ -21,16 +21,20 @@
         }
     }
 
+    
+    const settings = await chrome.storage.sync.get();
+    console.log("settings",settings);
+
     // Run hide function once at load
-    hideTargetDiv();
-    makeAllSelectable();
+    if (settings.hideEnabled) hideTargetDiv();
+    if (settings.selectabilityEnabled) makeAllSelectable();
 
     // Set up a MutationObserver to watch for changes in the DOM.
     const observer = new MutationObserver((mutations) => {
         // For every mutation, attempt to hide the target div
         mutations.forEach(() => {
-            if (chrome.storage.sync.get("hideEnabled")) hideTargetDiv();
-            if (chrome.storage.sync.get("selectabilityEnabled")) makeAllSelectable();
+            if (settings.hideEnabled) hideTargetDiv();
+            if (settings.selectabilityEnabled) makeAllSelectable();
         });
     });
 

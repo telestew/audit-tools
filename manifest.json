@@ -39,7 +39,7 @@
     "content_scripts": [
         {
             "matches": ["https://app.outlier.ai/en/expert/outlieradmin/tools/chat_bulk_audit/*"],
-            "js": ["hide_external_feedback.js","delimiter_tooltip.js"]
+            "js": ["hide_external_feedback.js"]
         },
 	{
             "matches": ["https://app.outlier.ai/en/expert/outlieradmin/tools/chat_bulk_audit/*","https://app.outlier.ai/en/expert/outlieradmin/tools/lookup/*"],
