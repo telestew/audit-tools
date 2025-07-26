@@ -3,7 +3,7 @@
     "name": "Audit Tools",
     "version": "2.3",
     "description": "Tools for auditors (Scale QC team)",
-    "permissions": ["tabs", "scripting", "storage", "activeTab"],
+    "permissions": ["tabs", "scripting", "storage", "activeTab","cookies"],
     "background": {
         "service_worker": "background.js"
     },
@@ -19,6 +19,12 @@
                 "default": "Alt+K"
             },
             "description": "Looks up project in OpsHub by ID"
+        },
+        "create_operation_from_clipboard": {
+            "suggested_key": {
+                "default": "Alt+O"
+            },
+            "description": "Creates batch operation from clipboard IDs" 
         }
     },
     "host_permissions": ["<all_urls>"],
@@ -34,6 +40,10 @@
         {
             "matches": ["https://app.outlier.ai/en/expert/outlieradmin/tools/chat_bulk_audit/*"],
             "js": ["hide_external_feedback.js"]
+        },
+	{
+            "matches": ["https://app.outlier.ai/en/expert/outlieradmin/tools/chat_bulk_audit/*","https://app.outlier.ai/en/expert/outlieradmin/tools/lookup/*"],
+            "js": ["delimiter_tooltip.js"]
         }
     ]
 }

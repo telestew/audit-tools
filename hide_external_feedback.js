@@ -1,6 +1,4 @@
-
-
-(function() {
+(async function() {
     // Function to hide target div 
     function hideTargetDiv() {
         // Use XPath to find the grandparent <div> of the <p> element with the exact text
@@ -11,18 +9,32 @@
         const grandparentDiv = result.singleNodeValue;
         if (grandparentDiv) {
             // Remove the grandparent <div>
-            grandparentDiv.style.display = chrome.storage.sync.get("hideEnabled") ? 'none' : ''; 
+            grandparentDiv.style.display = 'none'; 
         }
     }
 
+    function makeAllSelectable() {
+        let elements = document.querySelectorAll('.select-none');
+    
+        for (element of elements) {
+            element.style.userSelect = 'text'; 
+        }
+    }
+
+    
+    const settings = await chrome.storage.sync.get();
+    console.log("settings",settings);
+
     // Run hide function once at load
-    hideTargetDiv();
+    if (settings.hideEnabled) hideTargetDiv();
+    if (settings.selectabilityEnabled) makeAllSelectable();
 
     // Set up a MutationObserver to watch for changes in the DOM.
     const observer = new MutationObserver((mutations) => {
         // For every mutation, attempt to hide the target div
         mutations.forEach(() => {
-            hideTargetDiv();
+            if (settings.hideEnabled) hideTargetDiv();
+            if (settings.selectabilityEnabled) makeAllSelectable();
         });
     });
 
