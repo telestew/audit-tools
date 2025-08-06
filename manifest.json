@@ -3,7 +3,7 @@
     "name": "Audit Tools",
     "version": "3.0.1",
     "description": "Tools for auditors (Scale QC team)",
-    "permissions": ["tabs", "scripting", "storage", "activeTab","cookies"],
+    "permissions": ["tabs", "scripting", "storage", "activeTab","cookies", "alarms", "offscreen"],
     "background": {
         "service_worker": "background.js"
     },
