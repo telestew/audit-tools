@@ -4,12 +4,12 @@
 
     if (!settings.delimiterTooltipsEnabled) return;
     const cssText = `
-        math-inline.math-node {
+        .math-node {
             position: relative;
             display: inline-block;
         }
 
-        math-inline.math-node::before {
+        .math-node::before {
             content: attr(open) ' ' attr(close);
             position: absolute;
             bottom: 100%;
@@ -29,7 +29,7 @@
             z-index: 10000;
         }
 
-        math-inline.math-node:hover::before {
+        .math-node:hover::before {
             opacity: 1;
         }
     `;
@@ -45,9 +45,9 @@
         document.querySelectorAll('*').forEach(element => {
 	    if (element.shadowRoot) {
                 // Check if we already injected styles
-                if (!element.shadowRoot.querySelector('.math-inline-tooltip-styles')) {
+                if (!element.shadowRoot.querySelector('.math-tooltip-styles')) {
 		    const shadowStyle = document.createElement('style');
-		    shadowStyle.className = 'math-inline-tooltip-styles';
+		    shadowStyle.className = 'math-tooltip-styles';
 		    shadowStyle.textContent = cssText;
 		    element.shadowRoot.appendChild(shadowStyle);
                 }
@@ -76,7 +76,7 @@
         // Inject our styles into the new shadow root
         setTimeout(() => {
 	    const shadowStyle = document.createElement('style');
-	    shadowStyle.className = 'math-inline-tooltip-styles';
+	    shadowStyle.className = 'math-tooltip-styles';
 	    shadowStyle.textContent = cssText;
 	    shadowRoot.appendChild(shadowStyle);
         }, 0);
