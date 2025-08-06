@@ -1,7 +1,10 @@
 # Tools for auditors (Scale QC team)
 
 ## For all auditors
-- Automatically disable "External Feedback" box in Bulk Audit
+- Automatically hide "External Feedback" box in Bulk Audit
+- Make all prompts selectable
+- Create operations in Outlier: `<ALT+O>` (or `<OPTION+O>` on Mac)
+- Show delimeter tooltips 
 - Lookup task in Outlier: `<ALT+L>` (or `<OPTION+L>` on Mac)
 
 ## For validators
