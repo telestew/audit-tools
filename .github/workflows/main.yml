@@ -1,18 +1,18 @@
-# generated from google AI mode https://www.google.com/search?q=release+chrome+extension+zip+and+webstore+github+action&rlz=1CAKWVH_enUS1146US1146&gs_lcrp=EgZjaHJvbWUyBggAEEUYOTIHCAEQIRigATIHCAIQIRigATIHCAMQIRigATIHCAQQIRirAjIHCAUQIRiPAtIBCDk1MTBqMGo3qAIAsAIA&sourceid=chrome&ie=UTF-8&udm=50&fbs=AIIjpHxU7SXXniUZfeShr2fp4giZud1z6kQpMfoEdCJxnpm_3W-pLdZZVzNY_L9_ftx08kxElMEpo90JBBY0TEXYKcN_IwOPyE5tikuTlZNNw-umcbJxSDffR92FBO_sVFIn0cRVPgyQ0qNm9FOK_KicZnqXAi1wQnet-YTzXXFMkYUZ2rV6urDX1YuaR_drlEyA91i4HH-p5dD_cV90I9KyGSbzO3FCmQ&ved=2ahUKEwiCqdaisoaPAxUxCjQIHVUIOLYQ0NsOegQIVxAA&aep=10&ntc=1&mstk=AUtExfAZrWBqpoF8MLX7qVkLmlsCuqt6xsIH2epZJuvYo-pNwvrhd1c8OfxTwyCe0QOQX6HORa7paTFDTxVJKVAkXdaDSINwR6Xb3EFMHi4lHdbQzxwhLiSbgPu7umH8e60LIgUkEzvK0MLwhT1C5g1d1U6bl8lLN3RSU3Qued2Bwxxb0dZhy0-QJmRFf1IFpFKz0Zo9o4spttb7Xro_rGaeeIImWDKnbm6vkpnG-ggagPtREi8Qa3whvUUsTw&csuir=1
-name: Publish Chrome Extension
+# from https://www.google.com/search?q=release+chrome+extension+zip+and+webstore+github+action&rlz=1CAKWVH_enUS1146US1146&gs_lcrp=EgZjaHJvbWUyBggAEEUYOTIHCAEQIRigATIHCAIQIRigATIHCAMQIRigATIHCAQQIRirAjIHCAUQIRiPAtIBCDk1MTBqMGo3qAIAsAIA&sourceid=chrome&ie=UTF-8&udm=50&fbs=AIIjpHxU7SXXniUZfeShr2fp4giZud1z6kQpMfoEdCJxnpm_3W-pLdZZVzNY_L9_ftx08kxElMEpo90JBBY0TEXYKcN_IwOPyE5tikuTlZNNw-umcbJxSDffR92FBO_sVFIn0cRVPgyQ0qNm9FOK_KicZnqXAi1wQnet-YTzXXFMkYUZ2rV6urDX1YuaR_drlEyA91i4HH-p5dD_cV90I9KyGSbzO3FCmQ&ved=2ahUKEwiCqdaisoaPAxUxCjQIHVUIOLYQ0NsOegQIVxAA&aep=10&ntc=1&mstk=AUtExfAnCUG9v4jxKG4tjeeCLXrwpgkxUkuV2RzxBPMfdrf99ESGPf2TpF7Grkon3821YEQZVV0e5DYcXeq8B_bI4HdVNdw6kuTYfjDQNd20sIIeJInT_mzZbjc633TDY9dwbfrm8WUn1jI_MtHOGgaL9qeZ_jRnmvrmwLXhOgrp2c3wNONRaGVtGB_89kJJcOH9QYUqBWEHleFg6yTk-fkORm1bOqUm4_Bx6rphKHVXTFFYKGoH2uFRH1WqFw&csuir=1
+name: Release Chrome Extension and Create GitHub Release
 
 on:
   push:
     tags:
-      - 'v*' # Triggers on push of tags like v1.0.0, v1.2.3, etc.
+      - 'v*' # Trigger on push of tags like v1.0.0, v1.2.3, etc.
 
 jobs:
-  build_and_publish:
+  build_publish_release:
     runs-on: ubuntu-latest
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3 # Checks out your repository code
+      uses: actions/checkout@v3
 
     # Optional: If your extension requires a build step (e.g., using React, Vue, etc.)
     # - name: Setup Node.js
@@ -26,17 +26,42 @@ jobs:
     # - name: Build extension
     #   run: npm run build # Adjust build command as needed
 
+    - name: Extract version from tag
+      id: get_version # Give this step an ID to reference its outputs
+      run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT # Extracts the version (e.g., "1.0.0" from "v1.0.0")
+
     - name: Package extension as zip
       run: |
-        zip -r extension.zip ./ # Adjust path to your extension's build output
+        zip -r audit-tools-${{ steps.get_version.outputs.VERSION }}.zip ./ # Adjust path to your extension's build output and use the extracted version
 
     - name: Publish Chrome Extension
-      uses: browser-actions/release-chrome-extension@latest # You can also use mobilefirstllc/cws-publish@latest if you prefer
+      uses: browser-actions/release-chrome-extension@latest
       with:
-        extension-id: ${{ secrets.EXTENSION_ID }} # Get this from the Chrome Web Store Developer Console
-        extension-path: 'extension.zip' # Path to your zipped extension
-        oauth-client-id: ${{ secrets.OAUTH_CLIENT_ID }} # Your OAuth client ID
-        oauth-client-secret: ${{ secrets.OAUTH_CLIENT_SECRET }} # Your OAuth client secret
-        oauth-refresh-token: ${{ secrets.OAUTH_REFRESH_TOKEN }} # Your OAuth refresh token
-        action: 'publish' # Optional: Set to 'publish' for automatic submission to the store after upload, default is 'upload'
-        target: 'trustedUsers' # Optional: Set to 'trustedUsers' for publishing to a limited set of testers, default is 'default'
+        extension-id: ${{ secrets.EXTENSION_ID }}
+        extension-path: 'audit-tools-${{ steps.get_version.outputs.VERSION }}.zip' # Use the generated zip file name
+        oauth-client-id: ${{ secrets.OAUTH_CLIENT_ID }}
+        oauth-client-secret: ${{ secrets.OAUTH_CLIENT_SECRET }}
+        oauth-refresh-token: ${{ secrets.OAUTH_REFRESH_TOKEN }}
+        # action: 'publish' # Optional: Set to 'publish' for automatic submission, default is 'upload'
+        # target: 'default' # Optional: Set to 'trustedUsers' for publishing to testers, default is 'default'
+
+    - name: Create GitHub Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        draft: false
+        prerelease: false
+
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./audit-tools-${{ steps.get_version.outputs.VERSION }}.zip # Path to the generated zip file
+        asset_name: audit-tools-${{ steps.get_version.outputs.VERSION }}.zip # Use the generated zip file name for the asset
+        asset_content_type: application/zip
