@@ -1,0 +1,26 @@
+{
+    "manifest_version": 3,
+    "name": "Task JSON Exporter Demo",
+    "version": "1.0",
+    "description": "Copies task body JSON to clipboard from a chat_bulk_audit page using Alt+C.",
+    "permissions": [
+        "storage",
+        "cookies",
+        "scripting",
+        "clipboardWrite"
+    ],
+    "host_permissions": [
+        "https://app.outlier.ai/*"
+    ],
+    "background": {
+        "service_worker": "background.js"
+    },
+    "commands": {
+        "copy-task-json": {
+            "suggested_key": {
+                "default": "Alt+C"
+            },
+            "description": "Copies the task JSON to the clipboard."
+        }
+    }
+}
