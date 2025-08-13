@@ -39,9 +39,9 @@ jobs:
       with:
         extension-id: ${{ secrets.EXTENSION_ID }}
         extension-path: 'audit-tools-${{ steps.get_version.outputs.VERSION }}.zip' # Use the generated zip file name
-        oauth-client-id: ${{ secrets.OAUTH_CLIENT_ID }}
-        oauth-client-secret: ${{ secrets.OAUTH_CLIENT_SECRET }}
-        oauth-refresh-token: ${{ secrets.OAUTH_REFRESH_TOKEN }}
+        oauth-client-id: ${{ secrets.CLIENT_ID }}
+        oauth-client-secret: ${{ secrets.CLIENT_SECRET }}
+        oauth-refresh-token: ${{ secrets.REFRESH_TOKEN }}
         # action: 'publish' # Optional: Set to 'publish' for automatic submission, default is 'upload'
         # target: 'default' # Optional: Set to 'trustedUsers' for publishing to testers, default is 'default'
 
