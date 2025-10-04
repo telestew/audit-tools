@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "Audit Tools",
-    "version": "3.0.1",
+    "version": "3.0.2",
     "description": "Tools for auditors (Scale QC team)",
     "permissions": ["tabs", "scripting", "storage", "activeTab","cookies"],
     "background": {
@@ -25,6 +25,12 @@
                 "default": "Alt+O"
             },
             "description": "Creates batch operation from clipboard IDs" 
+        },
+        "lookup_attempt": {
+            "suggested_key": {
+                "default": "Alt+A"
+            },
+            "description": "Looks up task attempt by related object ID"
         }
     },
     "host_permissions": ["<all_urls>"],
