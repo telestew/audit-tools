@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "Audit Tools",
-    "version": "3.0.1",
+    "version": "3.0.2",
     "description": "Tools for auditors (Scale QC team)",
     "permissions": ["tabs", "scripting", "storage", "activeTab","cookies", "alarms", "offscreen"],
     "background": {
