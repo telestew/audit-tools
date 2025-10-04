@@ -25,6 +25,12 @@
                 "default": "Alt+O"
             },
             "description": "Creates batch operation from clipboard IDs" 
+        },
+        "lookup_attempt": {
+            "suggested_key": {
+                "default": "Alt+A"
+            },
+            "description": "Looks up task attempt by related object ID"
         }
     },
     "host_permissions": ["<all_urls>"],

@@ -34,6 +34,9 @@ chrome.commands.onCommand.addListener((command) => {
             case "create_operation_from_clipboard":
                 if (data.createOperationsEnabled) executeScript("create_operation_from_clipboard.js");
                 break;
+            case "lookup_attempt":
+                executeScript("lookup_attempt.js");
+                break;
         }
     });
 });
