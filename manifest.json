@@ -14,12 +14,6 @@
             },
             "description": "Looks up task in Outlier by ID"
         },
-        "lookup_project": {
-            "suggested_key": {
-                "default": "Alt+K"
-            },
-            "description": "Looks up project in OpsHub by ID"
-        },
         "create_operation_from_clipboard": {
             "suggested_key": {
                 "default": "Alt+O"
@@ -31,6 +25,12 @@
                 "default": "Alt+A"
             },
             "description": "Looks up task attempt by related object ID"
+        },
+        "claim_operation_from_clipboard": {
+            "suggested_key": {
+                "default": "Shift+Alt+O"
+            },
+            "description": "Claim an operation from an ID on the clipboard"
         }
     },
     "host_permissions": ["<all_urls>"],
