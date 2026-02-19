@@ -22,7 +22,20 @@ document.addEventListener("DOMContentLoaded", async () => {
                     </div>
                 </div>
                 <div class="editor-container hidden">
-                    <textarea class="editor">${JSON.stringify(plugin, null, 2)}</textarea>
+                    <div class="editor-tabs">
+                        <div class="tab-btn active" data-tab="json">JSON Config</div>
+                        <div class="tab-btn" data-tab="scripts">Content Scripts</div>
+                        <div class="tab-btn" data-tab="commands">Commands</div>
+                    </div>
+                    <div class="tab-content json-tab">
+                        <textarea class="editor" spellcheck="false">${JSON.stringify(plugin, null, 2)}</textarea>
+                    </div>
+                    <div class="tab-content scripts-tab hidden">
+                        <div class="scripts-editors"></div>
+                    </div>
+                    <div class="tab-content commands-tab hidden">
+                        <div class="command-editors"></div>
+                    </div>
                     <div class="actions">
                         <button class="save-plugin">Save Changes</button>
                         <button class="close-editor secondary">Close</button>
@@ -35,12 +48,59 @@ document.addEventListener("DOMContentLoaded", async () => {
                 await savePlugins(plugins);
             };
             
+            const editorContainer = card.querySelector('.editor-container');
+            const scriptsEditorsList = card.querySelector('.scripts-editors');
+            const commandEditorsList = card.querySelector('.command-editors');
+
             card.querySelector('.edit-btn').onclick = () => {
-                card.querySelector('.editor-container').classList.remove('hidden');
+                editorContainer.classList.remove('hidden');
+                
+                // Content Scripts Tab
+                scriptsEditorsList.innerHTML = '';
+                if (plugin.contentScripts && plugin.contentScripts.length > 0) {
+                    plugin.contentScripts.forEach((cs, i) => {
+                        const div = document.createElement('div');
+                        div.style.marginBottom = '15px';
+                        div.innerHTML = `
+                            <div style="font-size: 12px; font-weight: bold; margin-bottom: 5px;">Script #${i+1} (${cs.matches.join(', ')})</div>
+                            <textarea class="cs-editor" data-index="${i}" spellcheck="false">${cs.code}</textarea>
+                        `;
+                        scriptsEditorsList.appendChild(div);
+                    });
+                } else {
+                    scriptsEditorsList.innerHTML = '<div style="font-size: 12px; color: #666;">No content scripts defined.</div>';
+                }
+
+                // Commands Tab
+                commandEditorsList.innerHTML = '';
+                if (plugin.commands && Object.keys(plugin.commands).length > 0) {
+                    Object.entries(plugin.commands).forEach(([cmd, code]) => {
+                        const div = document.createElement('div');
+                        div.style.marginBottom = '15px';
+                        div.innerHTML = `
+                            <div style="font-size: 12px; font-weight: bold; margin-bottom: 5px;">${cmd}</div>
+                            <textarea class="cmd-editor" data-cmd="${cmd}" spellcheck="false">${code}</textarea>
+                        `;
+                        commandEditorsList.appendChild(div);
+                    });
+                } else {
+                    commandEditorsList.innerHTML = '<div style="font-size: 12px; color: #666;">No commands defined for this plugin.</div>';
+                }
             };
 
+            card.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.onclick = () => {
+                    card.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    const tab = btn.dataset.tab;
+                    card.querySelector('.json-tab').classList.toggle('hidden', tab !== 'json');
+                    card.querySelector('.scripts-tab').classList.toggle('hidden', tab !== 'scripts');
+                    card.querySelector('.commands-tab').classList.toggle('hidden', tab !== 'commands');
+                };
+            });
+
             card.querySelector('.close-editor').onclick = () => {
-                card.querySelector('.editor-container').classList.add('hidden');
+                editorContainer.classList.add('hidden');
             };
             
             card.querySelector('.delete-btn').onclick = async () => {
@@ -53,6 +113,21 @@ document.addEventListener("DOMContentLoaded", async () => {
             card.querySelector('.save-plugin').onclick = async () => {
                 try {
                     const updated = JSON.parse(card.querySelector('.editor').value);
+                    
+                    // Update content scripts from scripts tab
+                    card.querySelectorAll('.cs-editor').forEach(textarea => {
+                        if (updated.contentScripts && updated.contentScripts[textarea.dataset.index]) {
+                            updated.contentScripts[textarea.dataset.index].code = textarea.value;
+                        }
+                    });
+
+                    // Update commands from command tab if they were edited there
+                    card.querySelectorAll('.cmd-editor').forEach(textarea => {
+                        if (updated.commands) {
+                            updated.commands[textarea.dataset.cmd] = textarea.value;
+                        }
+                    });
+
                     plugins[index] = updated;
                     await savePlugins(plugins);
                     alert('Plugin updated!');

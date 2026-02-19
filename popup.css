@@ -84,7 +84,7 @@ input[type="checkbox"]:checked + .toggle-slider::before {
 /* Dropdown Menu */
 label[for="lookupMode"] {
     font-size: 14px;
-    margin-top: 25px;
+    margin-top: 15px;
     margin-left: 25px;
     display: block;
     color: #222;
@@ -92,7 +92,7 @@ label[for="lookupMode"] {
 
 label[for="projectDays"] {
     font-size: 14px;
-    margin-top: 25px;
+    margin-top: 15px;
     margin-left: 25px;
     display: block;
     color: #222;
@@ -102,7 +102,7 @@ select {
     width: 12em;
     white-space: nowrap;
     padding: 6px;
-    margin-top: -10px;
+    margin-top: 5px;
     margin-left: 55px;
     border: 1px solid #ccc;
     border-radius: 8px;
