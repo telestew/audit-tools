@@ -1,0 +1,155 @@
+/* Base theme variables */
+:root {
+    --primary-color: #0078D4;
+    --primary-hover-color: #004880;
+
+    --text-color: #222;
+    --secondary-text-color: #666;
+    --background-color: #efefff; /* Light blue background for body */
+    --card-background-color: #ffffff;
+    --border-color: #ccc;
+    --shadow-color: rgba(0,0,0,0.1);
+
+    --group-card-background-color: #e0e0f0; /* Slightly different for groups */
+    --group-border-color: #a0a0c0;
+    --group-shadow-color: rgba(0,0,0,0.08);
+
+    --input-background-color: #f8f8f8;
+
+    --toggle-background-color: #ccc;
+    --toggle-slider-color: white;
+    --toggle-checked-background-color: var(--primary-color);
+
+    --select-background-color: #f8f8f8;
+    --select-border-color: #ccc;
+    --select-focus-background-color: #f0f0f0;
+    --select-focus-border-color: #888;
+
+    --button-background-color: var(--primary-color);
+    --button-text-color: white;
+    --button-border-color: var(--primary-color);
+    --button-hover-background-color: var(--primary-hover-color);
+    --button-hover-text-color: white;
+    --button-hover-border-color: var(--primary-hover-color);
+
+    --danger-button-background-color: #d9534f;
+    --danger-button-text-color: white;
+    --danger-button-border-color: #d9534f;
+    --danger-button-hover-background-color: #c9302c;
+    --danger-button-hover-text-color: white;
+    --danger-button-hover-border-color: #c9302c;
+
+    --secondary-button-background-color: #6c757d;
+    --secondary-button-text-color: white;
+    --secondary-button-border-color: #6c757d;
+    --secondary-button-hover-background-color: #5a6268;
+    --secondary-button-hover-text-color: white;
+    --secondary-button-hover-border-color: #5a6268;
+
+    --tab-background-color: #f0f0f0;
+    --tab-hover-background-color: #e8e8e8;
+
+    /* Code editor specific colors (default to light) */
+    --code-background-color: #fafafa;
+    --code-text-color: #333;
+    --code-gutter-background-color: #f0f0f0;
+    --code-gutter-text-color: #999;
+    --code-active-line-background-color: rgba(0, 120, 212, 0.1); /* Lighter primary color */
+}
+
+/* Dark Theme */
+html.dark {
+    --primary-color: #5d9cec;
+    --primary-hover-color: #3b8cd9;
+
+    --text-color: #e0e0e0;
+    --secondary-text-color: #a0a0a0;
+    --background-color: #2c2c2c;
+    --card-background-color: #3a3a3a;
+    --border-color: #555;
+    --shadow-color: rgba(0,0,0,0.3);
+
+    --group-card-background-color: #333333;
+    --group-border-color: #666666;
+    --group-shadow-color: rgba(0,0,0,0.25);
+
+    --input-background-color: #4a4a4a;
+
+    --toggle-background-color: #666;
+    --toggle-slider-color: #eee;
+    --toggle-checked-background-color: var(--primary-color);
+
+    --select-background-color: #4a4a4a;
+    --select-border-color: #666;
+    --select-focus-background-color: #5a5a5a;
+    --select-focus-border-color: #a0a0a0;
+
+    --button-background-color: var(--primary-color);
+    --button-text-color: white;
+    --button-border-color: var(--primary-color);
+    --button-hover-background-color: var(--primary-hover-color);
+    --button-hover-text-color: white;
+    --button-hover-border-color: var(--primary-hover-color);
+
+    --danger-button-background-color: #c0392b;
+    --danger-button-text-color: white;
+    --danger-button-border-color: #c0392b;
+    --danger-button-hover-background-color: #a02c20;
+    --danger-button-hover-text-color: white;
+    --danger-button-hover-border-color: #a02c20;
+
+    --secondary-button-background-color: #7f8c8d;
+    --secondary-button-text-color: white;
+    --secondary-button-border-color: #7f8c8d;
+    --secondary-button-hover-background-color: #6b7a7c;
+    --secondary-button-hover-text-color: white;
+    --secondary-button-hover-border-color: #6b7a7c;
+
+    --tab-background-color: #4a4a4a;
+    --tab-hover-background-color: #5a5a5a;
+    
+    /* Code editor specific colors (CodeMirror One Dark theme) */
+    --code-background-color: #282c34;
+    --code-text-color: #abb2bf;
+    --code-gutter-background-color: #282c34;
+    --code-gutter-text-color: #636d83;
+    --code-active-line-background-color: #3b3f46;
+}
+
+/* Apply theme variables to body for popup.html */
+body {
+    background-color: var(--background-color);
+    color: var(--text-color);
+}
+h3, h4, h5 {
+    color: var(--text-color);
+}
+.toggle-slider {
+    background: var(--toggle-background-color);
+}
+input[type="checkbox"]:checked + .toggle-slider {
+    background: var(--toggle-checked-background-color);
+}
+.toggle-slider::before {
+    background: var(--toggle-slider-color);
+}
+select {
+    background: var(--select-background-color);
+    border-color: var(--select-border-color);
+    color: var(--text-color);
+}
+select:focus {
+    border-color: var(--select-focus-border-color);
+    background: var(--select-focus-background-color);
+}
+/* For Popup Save Button */
+#save {
+    background: var(--button-background-color);
+    color: var(--button-text-color);
+    border: 1px solid var(--button-border-color);
+}
+#save:hover {
+    background: var(--button-hover-background-color);
+    border-color: var(--button-hover-border-color);
+    color: var(--button-hover-text-color);
+}

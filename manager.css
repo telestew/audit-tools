@@ -1,0 +1,349 @@
+body {
+    width: 800px;
+    padding: 20px;
+    background-color: var(--background-color);
+    color: var(--text-color);
+    font-family: Arial, sans-serif;
+}
+
+.plugin-card {
+    border: 1px solid var(--border-color);
+    padding: 15px;
+    margin: 10px 0;
+    border-radius: 8px;
+    background: var(--card-background-color);
+    box-shadow: 0 2px 4px var(--shadow-color);
+    display: flex; /* For drag handle and content */
+    align-items: flex-start; /* Align header items to start */
+}
+
+.plugin-card.dragging {
+    opacity: 0.5;
+}
+
+.drag-handle {
+    cursor: grab;
+    font-size: 24px;
+    padding: 0 10px;
+    line-height: 1; /* Aligns hamburger icon better */
+    color: var(--text-color);
+    margin-right: 10px;
+    align-self: center; /* Center vertically within the header */
+}
+
+.plugin-card.group-card .drag-handle {
+    margin-top: 5px; /* Adjust for group input alignment */
+}
+
+.plugin-header {
+    flex-grow: 1; /* Allows header to take available space */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.plugin-info {
+    flex-grow: 1; /* Allows info to take available space */
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start; /* Left justify info */
+    margin-right: 10px; /* Space from actions */
+}
+
+.plugin-name {
+    font-size: 1.2em;
+    font-weight: bold;
+    color: var(--text-color);
+}
+
+.plugin-id {
+    font-size: 0.9em;
+    color: var(--secondary-text-color);
+}
+
+/* Group Card Specifics */
+.plugin-card.group-card {
+    background: var(--group-card-background-color);
+    border-color: var(--group-border-color);
+    box-shadow: 0 2px 4px var(--group-shadow-color);
+    padding: 10px 15px;
+    align-items: center; /* Center content vertically */
+}
+
+.plugin-card.group-card .plugin-header {
+    margin-bottom: 0;
+}
+
+.group-name-input {
+    font-size: 1.4em;
+    font-weight: bold;
+    color: var(--text-color);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 5px 8px;
+    width: 100%; /* Take full width */
+}
+
+.group-name-input:focus {
+    border-color: var(--primary-color);
+    background: var(--input-background-color);
+}
+
+.plugin-card.group-card .actions {
+    margin-left: auto; /* Push delete button to the right */
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.plugin-card.group-card .delete-btn {
+    padding: 5px 10px;
+    font-size: 0.9em;
+    border-radius: 5px;
+}
+
+/* Editor Styling */
+.editor-container {
+    margin-top: 15px;
+    width: 100%;
+}
+
+.editor-tabs {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 0px;
+    position: relative;
+    top: 1px;
+}
+
+.tab-btn {
+    padding: 8px 15px;
+    background: var(--tab-background-color);
+    border: 1px solid var(--border-color);
+    border-bottom: none;
+    border-radius: 6px 6px 0 0;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--secondary-text-color);
+    transition: 0.2s;
+}
+
+.tab-btn:hover {
+    background: var(--tab-hover-background-color);
+}
+
+.tab-btn.active {
+    background: var(--background-color);
+    border-bottom: 1px solid var(--background-color);
+    color: var(--text-color);
+    font-weight: bold;
+    z-index: 2;
+}
+
+.tab-content {
+    border: 1px solid var(--border-color);
+    padding: 15px;
+    border-radius: 0 6px 6px 6px;
+    background: var(--background-color);
+    z-index: 1;
+    position: relative;
+}
+
+.editor, .cmd-editor, .cs-editor {
+    width: 100%;
+    min-height: 200px; /* Reduced min-height slightly */
+    font-family: 'Fira Code', 'Courier New', monospace; /* Fira Code for ligatures if available */
+    font-size: 12px;
+    padding: 0; /* CodeMirror handles padding internally */
+    border: none; /* CodeMirror creates its own border */
+    background: var(--code-background-color);
+    color: var(--code-text-color);
+    box-sizing: border-box;
+    display: block; /* Ensure it takes full width */
+}
+
+/* CodeMirror specific styling */
+.cm-editor {
+    height: 350px; /* Fixed height for JSON editor */
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--code-background-color);
+}
+.cm-editor.cm-focused {
+    outline: none;
+    border-color: var(--primary-color);
+}
+.cm-scroller {
+    font-family: 'Fira Code', 'Courier New', monospace;
+}
+.cm-gutter, .cm-line {
+    font-size: 12px;
+}
+.cm-gutters {
+    background-color: var(--code-gutter-background-color) !important;
+    color: var(--code-gutter-text-color) !important;
+    border-right: 1px solid var(--border-color) !important;
+}
+
+/* Command and Content Script editor heights */
+.command-editors .cm-editor,
+.scripts-editors .cm-editor {
+    height: 200px;
+}
+
+
+.actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+    flex-wrap: wrap; /* Allow buttons to wrap */
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* Generic Button Styling (manager specific) */
+button {
+    padding: 8px 15px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
+    border: 1px solid var(--button-border-color);
+    background: var(--button-background-color);
+    color: var(--button-text-color);
+}
+
+button:hover {
+    background: var(--button-hover-background-color);
+    border-color: var(--button-hover-border-color);
+    color: var(--button-hover-text-color);
+}
+
+button.danger {
+    background: var(--danger-button-background-color);
+    border-color: var(--danger-button-border-color);
+    color: var(--danger-button-text-color);
+}
+button.danger:hover {
+    background: var(--danger-button-hover-background-color);
+    border-color: var(--danger-button-hover-border-color);
+    color: var(--danger-button-hover-text-color);
+}
+button.secondary {
+    background: var(--secondary-button-background-color);
+    border-color: var(--secondary-button-border-color);
+    color: var(--secondary-button-text-color);
+}
+button.secondary:hover {
+    background: var(--secondary-button-hover-background-color);
+    border-color: var(--secondary-button-hover-border-color);
+    color: var(--secondary-button-hover-text-color);
+}
+
+label.button {
+    display: inline-block;
+    padding: 8px 15px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 14px;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
+    border: 1px solid var(--button-border-color);
+    background: var(--button-background-color);
+    color: var(--button-text-color);
+    text-align: center; /* For label buttons */
+}
+label.button.secondary {
+    background: var(--secondary-button-background-color);
+    border-color: var(--secondary-button-border-color);
+    color: var(--secondary-button-text-color);
+}
+label.button.secondary:hover {
+    background: var(--secondary-button-hover-background-color);
+    border-color: var(--secondary-button-hover-border-color);
+    color: var(--secondary-button-hover-text-color);
+}
+
+
+.theme-selector {
+    margin-top: 15px;
+    margin-bottom: 20px;
+    font-size: 14px;
+    display: flex;
+    gap: 15px;
+    align-items: center;
+}
+.theme-selector label {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    color: var(--text-color);
+}
+.theme-selector input[type="radio"] {
+    margin-right: 5px;
+    accent-color: var(--primary-color);
+}
+
+/* CodeMirror base styling for syntax highlighting (from CodeMirror defaults) */
+.cm-line {
+  padding-left: 2px;
+}
+.cm-activeLine {
+  background-color: var(--code-active-line-background-color);
+}
+.cm-activeLineGutter {
+  background-color: var(--code-active-line-background-color);
+}
+
+/* Basic CodeMirror linting styles */
+.cm-diagnostic {
+    padding: 3px 5px 3px 2px;
+    margin-left: 2px;
+    border-left: 3px solid;
+    font-family: monospace;
+    font-size: 0.7em;
+    position: relative;
+    white-space: pre-wrap;
+    cursor: pointer;
+}
+
+.cm-diagnostic-error { border-color: #d11; }
+.cm-diagnostic-warning { border-color: #e8a700; }
+.cm-diagnostic-info { border-color: #999; }
+
+.cm-diagnostic.cm-diagnostic-error::before,
+.cm-diagnostic.cm-diagnostic-warning::before,
+.cm-diagnostic.cm-diagnostic-info::before {
+    content: "✖"; /* Unicode 'heavy multiplication x' */
+    position: absolute;
+    left: -15px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 1.2em;
+    font-weight: bold;
+    color: #d11; /* Error color */
+}
+.cm-diagnostic.cm-diagnostic-warning::before {
+    content: "⚠"; /* Unicode 'warning sign' */
+    color: #e8a700; /* Warning color */
+}
+.cm-diagnostic.cm-diagnostic-info::before {
+    content: "ℹ"; /* Unicode 'information source' */
+    color: #999; /* Info color */
+}
+.cm-lint-marker {
+  width: 0.7em;
+  height: 0.7em;
+  border-radius: 50%;
+  margin-right: 3px;
+  display: inline-block;
+  vertical-align: middle;
+}
+.cm-lint-marker-error { background-color: #d11; }
+.cm-lint-marker-warning { background-color: #e8a700; }
+.cm-lint-marker-info { background-color: #999; }

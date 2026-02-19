@@ -1,4 +1,10 @@
+let themeEditors = {}; // Store CodeMirror instances
+
 document.addEventListener("DOMContentLoaded", async () => {
+    // Apply theme on popup load
+    const { theme = 'auto' } = await chrome.storage.local.get('theme');
+    applyTheme(theme);
+
     const { plugins } = await chrome.storage.local.get('plugins');
     if (!plugins) return;
 
@@ -18,9 +24,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         } else if (item.type === 'plugin' && item.enabled && item.configSchema) {
             const targetContainer = currentGroupElement || settingsContainer;
 
-            const pluginHeader = document.createElement('h5'); // Changed to h5 for nested hierarchy
-            pluginHeader.textContent = item.name;
-            targetContainer.appendChild(pluginHeader);
+            // Removed pluginHeader.textContent = item.name;
+            // Config widgets will be directly under the group or main container
 
             const storageKey = `plugin_settings_${item.id.replace(/-/g, '_')}`;
             const stored = await chrome.storage.local.get(storageKey);
@@ -90,3 +95,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         alert("Settings saved!");
     });
 });
+
+async function applyTheme(theme) {
+    let finalTheme = theme;
+    if (theme === 'auto') {
+        finalTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    document.documentElement.className = finalTheme;
+}
