@@ -1,12 +1,13 @@
 {
     "manifest_version": 3,
     "name": "Audit Tools",
-    "version": "3.0.2",
-    "description": "Tools for auditors (Scale QC team)",
-    "permissions": ["scripting", "storage", "activeTab", "cookies"],
+    "version": "4.0.0",
+    "description": "Tools for auditors (Scale QC team) - Plugin based",
+    "permissions": ["scripting", "storage", "activeTab", "cookies", "tabs"],
     "background": {
         "service_worker": "background.js"
     },
+    "options_page": "manager.html",
     "commands": {
         "lookup_task": {
             "suggested_key": {
@@ -41,15 +42,5 @@
             "48": "icon.png",
             "128": "icon.png"
         }
-    },
-    "content_scripts": [
-        {
-            "matches": ["https://app.outlier.ai/en/expert/outlieradmin/tools/chat_bulk_audit/*"],
-            "js": ["hide_external_feedback.js"]
-        },
-	{
-            "matches": ["https://app.outlier.ai/en/expert/outlieradmin/tools/chat_bulk_audit/*","https://app.outlier.ai/en/expert/outlieradmin/tools/lookup/*"],
-            "js": ["delimiter_tooltip.js"]
-        }
-    ]
+    }
 }

@@ -1,0 +1,28 @@
+{
+  "id": "lookup-task",
+  "name": "Lookup Task",
+  "enabled": true,
+  "config": {
+    "lookupMode": "highlighted"
+  },
+  "configSchema": [
+    {
+      "id": "lookupMode",
+      "type": "select",
+      "label": "Lookup with",
+      "options": [
+        {
+          "value": "clipboard",
+          "label": "from clipboard"
+        },
+        {
+          "value": "highlighted",
+          "label": "from highlighted text"
+        }
+      ]
+    }
+  ],
+  "commands": {
+    "lookup_task": "const { plugin_settings_lookup_task: config } = await chrome.storage.local.get('plugin_settings_lookup_task'); const mode = config?.lookupMode || 'highlighted'; let text = (mode === 'clipboard') ? await navigator.clipboard.readText() : window.getSelection().toString().trim(); if (text.match(/[A-Za-z0-9]/g) && text.length === 24) { window.open(`https://app.outlier.ai/en/expert/outlieradmin/tools/lookup/${text}#View%20Responses`, '_blank'); } else { alert('Not a valid ID: ' + text); }"
+  }
+}

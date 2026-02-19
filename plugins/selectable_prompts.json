@@ -1,0 +1,23 @@
+{
+  "id": "selectable-prompts",
+  "name": "Selectable Prompts",
+  "enabled": true,
+  "config": {
+    "enabled": true
+  },
+  "configSchema": [
+    {
+      "id": "enabled",
+      "type": "toggle",
+      "label": "Make all prompts selectable"
+    }
+  ],
+  "contentScripts": [
+    {
+      "matches": [
+        "https://app.outlier.ai/en/expert/outlieradmin/tools/chat_bulk_audit/*"
+      ],
+      "code": "const { plugin_settings_selectable_prompts: config } = await chrome.storage.local.get('plugin_settings_selectable_prompts'); if (config?.enabled !== false) { function make() { document.querySelectorAll('.select-none').forEach(el => el.style.userSelect = 'text'); } make(); new MutationObserver(make).observe(document.body, { childList: true, subtree: true }); }"
+    }
+  ]
+}

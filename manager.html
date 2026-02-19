@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Plugin Manager</title>
+    <link rel="stylesheet" href="popup.css">
+    <style>
+        body { width: 800px; padding: 20px; }
+        .plugin-card { border: 1px solid #ccc; padding: 15px; margin: 10px 0; border-radius: 8px; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .plugin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .editor-container { margin-top: 15px; }
+        .editor { width: 100%; height: 300px; font-family: 'Courier New', monospace; font-size: 12px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        .actions { display: flex; gap: 10px; margin-top: 10px; }
+        .hidden { display: none; }
+        .plugin-info { display: flex; flex-direction: column; }
+        .plugin-name { font-size: 1.2em; font-weight: bold; }
+        .plugin-id { font-size: 0.9em; color: #666; }
+        button.danger { background: #d9534f; }
+        button.danger:hover { background: #c9302c; }
+        button.secondary { background: #6c757d; }
+        button.secondary:hover { background: #5a6268; }
+    </style>
+</head>
+<body>
+    <div class="centered">
+        <h3>Plugin Manager</h3>
+    </div>
+    <div id="plugin-list"></div>
+    <div class="centered" style="margin-top: 30px; flex-direction: row; gap: 15px;">
+        <button id="add-plugin">Add New Plugin</button>
+        <button id="export-all" class="secondary">Export All</button>
+        <label for="import-file" class="button" style="display:inline-block; padding:10px; background:#6c757d; color:white; border-radius:8px; cursor:pointer; font-weight:bold; font-size: 16px;">Import Plugins</label>
+        <input type="file" id="import-file" class="hidden" accept=".json">
+    </div>
+    <script src="manager.js"></script>
+</body>
+</html>

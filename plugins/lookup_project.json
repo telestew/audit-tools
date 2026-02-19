@@ -1,0 +1,36 @@
+{
+  "id": "lookup-project",
+  "name": "Lookup Project",
+  "enabled": true,
+  "config": {
+    "lookupMode": "highlighted",
+    "projectDays": 2
+  },
+  "configSchema": [
+    {
+      "id": "lookupMode",
+      "type": "select",
+      "label": "Lookup with",
+      "options": [
+        {
+          "value": "clipboard",
+          "label": "from clipboard"
+        },
+        {
+          "value": "highlighted",
+          "label": "from highlighted text"
+        }
+      ]
+    },
+    {
+      "id": "projectDays",
+      "type": "number",
+      "label": "Project Lookup Days",
+      "min": 1,
+      "max": 90
+    }
+  ],
+  "commands": {
+    "lookup_project": "const { plugin_settings_lookup_project: config } = await chrome.storage.local.get('plugin_settings_lookup_project'); const days = parseInt(config?.projectDays) || 2; const mode = config?.lookupMode || 'highlighted'; let text = (mode === 'clipboard') ? await navigator.clipboard.readText() : window.getSelection().toString().trim(); if (text.match(/[A-Za-z0-9]/g) && text.length === 24) { const today = new Date(); const formatDate = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; const todayStr = formatDate(today); today.setDate(today.getDate() - (days - 1)); const pastStr = formatDate(today); window.open(`https://app.outlier.ai/en/expert/outlieradmin/tools/qc_audit_disputes/${text}?dateRange=${pastStr},${todayStr}`, '_blank'); } else { alert('Not a valid ID: ' + text); }"
+  }
+}
