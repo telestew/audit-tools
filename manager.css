@@ -23,16 +23,13 @@ body {
 
 .drag-handle {
     cursor: grab;
-    font-size: 24px;
-    padding: 0 10px;
-    line-height: 1; /* Aligns hamburger icon better */
+    font-size: 32px;
+    padding: 10px;
+    line-height: 1;
     color: var(--text-color);
-    margin-right: 10px;
-    align-self: center; /* Center vertically within the header */
-}
-
-.plugin-card.group-card .drag-handle {
-    margin-top: 5px; /* Adjust for group input alignment */
+    margin-right: 15px;
+    align-self: center;
+    user-select: none;
 }
 
 .plugin-header {
@@ -76,14 +73,15 @@ body {
 }
 
 .group-name-input {
-    font-size: 1.4em;
-    font-weight: bold;
+    font-size: 1.6em;
+    font-weight: 900;
     color: var(--text-color);
     background: transparent;
     border: 1px solid transparent;
     border-radius: 4px;
     padding: 5px 8px;
-    width: 100%; /* Take full width */
+    flex-grow: 1;
+    min-width: 0;
 }
 
 .group-name-input:focus {
@@ -92,16 +90,14 @@ body {
 }
 
 .plugin-card.group-card .actions {
-    margin-left: auto; /* Push delete button to the right */
+    margin-left: auto;
     display: flex;
     align-items: center;
-    gap: 5px;
 }
 
 .plugin-card.group-card .delete-btn {
-    padding: 5px 10px;
-    font-size: 0.9em;
-    border-radius: 5px;
+    padding: 8px 15px;
+    font-size: 14px;
 }
 
 /* Editor Styling */
@@ -164,34 +160,6 @@ body {
     display: block; /* Ensure it takes full width */
 }
 
-/* CodeMirror specific styling */
-.cm-editor {
-    height: 350px; /* Fixed height for JSON editor */
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    background: var(--code-background-color);
-}
-.cm-editor.cm-focused {
-    outline: none;
-    border-color: var(--primary-color);
-}
-.cm-scroller {
-    font-family: 'Fira Code', 'Courier New', monospace;
-}
-.cm-gutter, .cm-line {
-    font-size: 12px;
-}
-.cm-gutters {
-    background-color: var(--code-gutter-background-color) !important;
-    color: var(--code-gutter-text-color) !important;
-    border-right: 1px solid var(--border-color) !important;
-}
-
-/* Command and Content Script editor heights */
-.command-editors .cm-editor,
-.scripts-editors .cm-editor {
-    height: 200px;
-}
 
 
 .actions {
@@ -289,61 +257,3 @@ label.button.secondary:hover {
     accent-color: var(--primary-color);
 }
 
-/* CodeMirror base styling for syntax highlighting (from CodeMirror defaults) */
-.cm-line {
-  padding-left: 2px;
-}
-.cm-activeLine {
-  background-color: var(--code-active-line-background-color);
-}
-.cm-activeLineGutter {
-  background-color: var(--code-active-line-background-color);
-}
-
-/* Basic CodeMirror linting styles */
-.cm-diagnostic {
-    padding: 3px 5px 3px 2px;
-    margin-left: 2px;
-    border-left: 3px solid;
-    font-family: monospace;
-    font-size: 0.7em;
-    position: relative;
-    white-space: pre-wrap;
-    cursor: pointer;
-}
-
-.cm-diagnostic-error { border-color: #d11; }
-.cm-diagnostic-warning { border-color: #e8a700; }
-.cm-diagnostic-info { border-color: #999; }
-
-.cm-diagnostic.cm-diagnostic-error::before,
-.cm-diagnostic.cm-diagnostic-warning::before,
-.cm-diagnostic.cm-diagnostic-info::before {
-    content: "✖"; /* Unicode 'heavy multiplication x' */
-    position: absolute;
-    left: -15px;
-    top: 50%;
-    transform: translateY(-50%);
-    font-size: 1.2em;
-    font-weight: bold;
-    color: #d11; /* Error color */
-}
-.cm-diagnostic.cm-diagnostic-warning::before {
-    content: "⚠"; /* Unicode 'warning sign' */
-    color: #e8a700; /* Warning color */
-}
-.cm-diagnostic.cm-diagnostic-info::before {
-    content: "ℹ"; /* Unicode 'information source' */
-    color: #999; /* Info color */
-}
-.cm-lint-marker {
-  width: 0.7em;
-  height: 0.7em;
-  border-radius: 50%;
-  margin-right: 3px;
-  display: inline-block;
-  vertical-align: middle;
-}
-.cm-lint-marker-error { background-color: #d11; }
-.cm-lint-marker-warning { background-color: #e8a700; }
-.cm-lint-marker-info { background-color: #999; }

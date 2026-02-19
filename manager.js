@@ -25,9 +25,20 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     let draggedItem = null;
 
+    async function applyTheme(theme) {
+        let finalTheme = theme;
+        if (theme === 'auto') {
+            finalTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        document.documentElement.className = finalTheme;
+    }
+
     async function render() {
-        const { plugins = [] } = await chrome.storage.local.get('plugins');
-        
+        const { plugins = [], theme = 'auto' } = await chrome.storage.local.get(['plugins', 'theme']);
+        applyTheme(theme);
+        const themeRadio = document.querySelector(`input[name="theme"][value="${theme}"]`);
+        if (themeRadio) themeRadio.checked = true;
+
         list.innerHTML = '';
         plugins.forEach((item, index) => {
             const card = document.createElement('div');
@@ -96,9 +107,19 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const scriptsEditorsList = card.querySelector('.scripts-editors');
                 const commandEditorsList = card.querySelector('.command-editors');
 
+                const pluginActions = card.querySelector('.actions');
+
                 card.querySelector('.edit-btn').onclick = () => {
                     editorContainer.classList.remove('hidden');
+                    pluginActions.classList.add('hidden');
                     
+                    const jsonTextArea = card.querySelector('.json-tab .editor');
+                    const cmJson = CodeMirror.fromTextArea(jsonTextArea, {
+                        mode: "application/json",
+                        lineNumbers: true,
+                        theme: document.documentElement.className === 'dark' ? 'default' : 'default'
+                    });
+
                     // Content Scripts Tab
                     scriptsEditorsList.innerHTML = '';
                     if (item.contentScripts && item.contentScripts.length > 0) {
@@ -110,6 +131,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                                 <textarea class="cs-editor" data-index="${i}" spellcheck="false">${cs.code}</textarea>
                             `;
                             scriptsEditorsList.appendChild(div);
+                            CodeMirror.fromTextArea(div.querySelector('textarea'), {
+                                mode: "javascript",
+                                lineNumbers: true
+                            });
                         });
                     } else {
                         scriptsEditorsList.innerHTML = '<div style="font-size: 12px; color: #666;">No content scripts defined.</div>';
@@ -126,6 +151,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                                 <textarea class="cmd-editor" data-cmd="${cmd}" spellcheck="false">${code}</textarea>
                             `;
                             commandEditorsList.appendChild(div);
+                            CodeMirror.fromTextArea(div.querySelector('textarea'), {
+                                mode: "javascript",
+                                lineNumbers: true
+                            });
                         });
                     } else {
                         commandEditorsList.innerHTML = '<div style="font-size: 12px; color: #666;">No commands defined for this plugin.</div>';
@@ -145,11 +174,17 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                 card.querySelector('.close-editor').onclick = () => {
                     editorContainer.classList.add('hidden');
+                    pluginActions.classList.remove('hidden');
                 };
                 
                 card.querySelector('.save-plugin').onclick = async () => {
                     try {
-                        const updated = JSON.parse(card.querySelector('.editor').value);
+                        // Sync CodeMirror instances back to textareas before reading
+                        card.querySelectorAll('.CodeMirror').forEach(cmDiv => {
+                            cmDiv.CodeMirror.save();
+                        });
+
+                        const updated = JSON.parse(card.querySelector('.json-tab .editor').value);
                         
                         // Update content scripts from scripts tab
                         card.querySelectorAll('.cs-editor').forEach(textarea => {
@@ -323,6 +358,14 @@ document.addEventListener("DOMContentLoaded", async () => {
             render();
         }
     };
+
+    document.querySelectorAll('input[name="theme"]').forEach(radio => {
+        radio.onchange = async (e) => {
+            const theme = e.target.value;
+            await chrome.storage.local.set({ theme });
+            applyTheme(theme);
+        };
+    });
 
     render();
 });

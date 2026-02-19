@@ -1,10 +1,10 @@
 body {
     font-family: Arial, sans-serif;
-    background: #efefff; /* Light blue background */
+    background-color: var(--background-color); /* Use theme variable */
     width: 300px;
     padding: 15px;
     margin: 0;
-    color: #222;
+    color: var(--text-color); /* Use theme variable */
     text-align: left;
     line-height: 1.15;
 }
@@ -18,38 +18,45 @@ body {
 .settings {
     display: flex;
     flex-direction: column;
-    align-items: left;
+    /* align-items: left; */ /* This often conflicts with flex-direction: column */
 }
 
 h3 {
     font-size: 1.8em;
     margin-bottom: 10px;
-    color: #222;
+    color: var(--text-color); /* Use theme variable */
 }
 
-h4 {
+h4 { /* Group Headers */
     font-size: 1.5em;
     margin-bottom: 10px;
-    color: #222;
+    color: var(--text-color); /* Use theme variable */
+    border-bottom: 1px solid var(--border-color); /* Use theme variable */
+    padding-bottom: 5px;
+    margin-top: 20px;
 }
 
-.toggle-container {
+/* .toggle-container and .input-container (new for non-toggle labels) */
+.toggle-container, .input-container {
     display: flex;
     align-items: center;
-    justify-content: left;
-    width: 100%;
-    padding: 10px 0;
+    /* justify-content: left; */ /* Remove, flex-start is default and usually better */
+    width: 100%; /* Ensure full width for consistent layout */
+    padding: 5px 0; /* Adjusted padding */
     position: relative;
+    /* margin-left handled by inline styles for indentation */
+    /* margin-top handled by inline styles for spacing */
 }
 
 .toggle-slider {
     width: 34px;
     height: 18px;
-    background: #ccc;
+    background: var(--toggle-background-color); /* Use theme variable */
     border-radius: 15px;
     position: relative;
     cursor: pointer;
     transition: background 0.2s;
+    flex-shrink: 0; /* Prevent slider from shrinking */
 }
 
 .toggle-slider::before {
@@ -57,7 +64,7 @@ h4 {
     position: absolute;
     width: 14px;
     height: 14px;
-    background: white;
+    background: var(--toggle-slider-color); /* Use theme variable */
     border-radius: 50%;
     top: 2px;
     left: 2px;
@@ -69,7 +76,7 @@ input[type="checkbox"] {
 }
 
 input[type="checkbox"]:checked + .toggle-slider {
-    background: #0078D4;
+    background: var(--toggle-checked-background-color); /* Use theme variable */
 }
 
 input[type="checkbox"]:checked + .toggle-slider::before {
@@ -79,70 +86,55 @@ input[type="checkbox"]:checked + .toggle-slider::before {
 .toggle-label {
     font-size: 14px;
     margin-left: 10px;
+    color: var(--text-color); /* Use theme variable */
+    flex-grow: 1; /* Allow label to take remaining space */
 }
 
-/* Dropdown Menu */
-label[for="lookupMode"] {
+/* Dropdown and Number Input Styling */
+.input-container label {
     font-size: 14px;
-    margin-top: 15px;
-    margin-left: 25px;
-    display: block;
-    color: #222;
+    color: var(--text-color); /* Use theme variable */
+    margin-bottom: 5px; /* Space between label and input */
 }
 
-label[for="projectDays"] {
-    font-size: 14px;
-    margin-top: 15px;
-    margin-left: 25px;
-    display: block;
-    color: #222;
-}
-
-select {
+select, input[type="number"] {
     width: 12em;
     white-space: nowrap;
     padding: 6px;
-    margin-top: 5px;
-    margin-left: 55px;
-    border: 1px solid #ccc;
+    margin-top: 5px; /* Small space below label */
+    /* margin-left handled by inline styles */
+    border: 1px solid var(--select-border-color); /* Use theme variable */
     border-radius: 8px;
-    background: #f8f8f8;
+    background: var(--select-background-color); /* Use theme variable */
     font-size: 14px;
     outline: none;
     cursor: pointer;
     transition: 0.2s;
+    color: var(--text-color); /* Use theme variable */
 }
 
-select:focus {
-    border-color: #888;
-    background: #f0f0f0;
+select:focus, input[type="number"]:focus {
+    border-color: var(--select-focus-border-color); /* Use theme variable */
+    background: var(--select-focus-background-color); /* Use theme variable */
 }
 
-h4 {
-    font-size: 1.5em;
-    margin-bottom: 10px;
-    color: #222;
-    border-bottom: 1px solid #ccc; /* Separator for groups */
-    padding-bottom: 5px;
-    margin-top: 20px;
-}
-
-h5 { /* For plugin names within groups */
+/* No h5 needed as per request "just their actual config widgets" */
+/* h5 {
     font-size: 1.1em;
     margin-top: 15px;
     margin-bottom: 5px;
     margin-left: 15px;
-    color: #333;
-}
+    color: var(--text-color);
+} */
 
-/* Button Styling */
-button {
-    width: 40%;
+/* Button Styling (Save button) */
+button#save {
+    width: 80%; /* Wider save button */
     padding: 10px;
     margin-top: 25px;
-    background: #0078D4;
-    color: white;
-    border: none;
+    background: var(--button-background-color); /* Use theme variable */
+    color: var(--button-text-color); /* Use theme variable */
+    border: 1px solid var(--button-border-color); /* Use theme variable */
     border-radius: 8px;
     cursor: pointer;
     font-size: 16px;
@@ -150,6 +142,7 @@ button {
     transition: 0.2s;
 }
 
-button:hover {
-    background: #004880;
+button#save:hover {
+    background: var(--button-hover-background-color); /* Use theme variable */
+    border-color: var(--button-hover-border-color); /* Use theme variable */
 }

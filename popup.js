@@ -24,9 +24,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         } else if (item.type === 'plugin' && item.enabled && item.configSchema) {
             const targetContainer = currentGroupElement || settingsContainer;
 
-            // Removed pluginHeader.textContent = item.name;
-            // Config widgets will be directly under the group or main container
-
             const storageKey = `plugin_settings_${item.id.replace(/-/g, '_')}`;
             const stored = await chrome.storage.local.get(storageKey);
             const pluginSettings = stored[storageKey] || {};

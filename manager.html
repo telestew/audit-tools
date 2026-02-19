@@ -5,12 +5,11 @@
     <title>Plugin Manager</title>
     <link rel="stylesheet" href="theme.css">
     <link rel="stylesheet" href="manager.css">
-    <link rel="stylesheet" href="https://unpkg.com/codemirror@6.0.1/lib/codemirror.css">
-    <link rel="stylesheet" href="https://unpkg.com/@codemirror/theme-one-dark@6.0.1/dist/index.css">
+    <link rel="stylesheet" href="lib/codemirror/codemirror.css">
 </head>
 <body>
     <div class="centered">
-        <h3>Plugin Manager</h3>
+        <h1 style="font-size: 2.5em; margin-bottom: 10px;">Plugin Manager</h1>
         <div class="theme-selector">
             Theme:
             <label><input type="radio" name="theme" value="light"> Light</label>
@@ -19,6 +18,8 @@
         </div>
     </div>
     <div id="plugin-list"></div>
+    <script src="lib/codemirror/codemirror.js"></script>
+    <script src="lib/codemirror/javascript.js"></script>
     <div class="centered actions" style="margin-top: 30px;">
         <button id="add-plugin">Add New Plugin</button>
         <button id="add-group">Add Group Label</button>
@@ -28,11 +29,6 @@
         <button id="restore-defaults" class="secondary">Restore Defaults</button>
         <button id="clear-all-data" class="danger">Clear All Data</button>
     </div>
-    <script src="https://unpkg.com/codemirror@6.0.1/lib/codemirror.js"></script>
-    <script src="https://unpkg.com/@codemirror/lang-javascript@6.0.1/dist/index.js"></script>
-    <script src="https://unpkg.com/@codemirror/lang-json@6.0.1/dist/index.js"></script>
-    <script src="https://unpkg.com/@codemirror/lint@6.0.1/dist/index.js"></script>
-    <script src="https://unpkg.com/@codemirror/theme-one-dark@6.0.1/dist/index.js"></script>
     <script src="manager.js"></script>
 </body>
 </html>
