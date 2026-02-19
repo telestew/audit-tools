@@ -1,5 +1,6 @@
 body {
-    width: 800px;
+    max-width: 1200px;
+    margin: 0 auto;
     padding: 20px;
     background-color: var(--background-color);
     color: var(--text-color);
@@ -93,6 +94,8 @@ body {
     margin-left: auto;
     display: flex;
     align-items: center;
+    margin-top: 0;
+    align-self: center;
 }
 
 .plugin-card.group-card .delete-btn {
@@ -149,15 +152,17 @@ body {
 
 .editor, .cmd-editor, .cs-editor {
     width: 100%;
-    min-height: 200px; /* Reduced min-height slightly */
-    font-family: 'Fira Code', 'Courier New', monospace; /* Fira Code for ligatures if available */
-    font-size: 12px;
-    padding: 0; /* CodeMirror handles padding internally */
-    border: none; /* CodeMirror creates its own border */
-    background: var(--code-background-color);
-    color: var(--code-text-color);
+    min-height: 200px;
     box-sizing: border-box;
-    display: block; /* Ensure it takes full width */
+    display: block;
+}
+
+.CodeMirror {
+    height: auto;
+    min-height: 200px;
+    font-family: 'Fira Code', 'Courier New', monospace;
+    font-size: 14px;
+    border-radius: 4px;
 }
 
 

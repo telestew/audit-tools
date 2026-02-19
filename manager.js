@@ -10,7 +10,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             "type": "plugin",
             "config": { "enabled": true },
             "configSchema": [ { "id": "enabled", "type": "toggle", "label": "Hide 'External Feedback'" } ],
-            "contentScripts": [ { "matches": ["https://app.outlier.ai/en/expert/outlieradmin/tools/chat_bulk_audit/*"], "code": "const { plugin_settings_hide_external_feedback: config } = await chrome.storage.local.get('plugin_settings_hide_external_feedback'); if (config?.enabled !== false) { function hide() { const xpath = \"//p[text()='Task Feedback for Contributor (External)']/parent::*/parent::div\"; const result = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null); const div = result.singleNodeValue; if (div) div.style.display = 'none'; } hide(); new MutationObserver(hide).observe(document.body, { childList: true, subtree: true }); }" } ]
+            "contentScripts": [ { 
+                "matches": ["https://app.outlier.ai/en/expert/outlieradmin/tools/chat_bulk_audit/*"], 
+                "code": "const { plugin_settings_hide_external_feedback: config } = await chrome.storage.local.get('plugin_settings_hide_external_feedback');\n\nif (config?.enabled !== false) {\n    function hide() {\n        const xpath = \"//p[text()='Task Feedback for Contributor (External)']/parent::*/parent::div\";\n        const result = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);\n        const div = result.singleNodeValue;\n        if (div) div.style.display = 'none';\n    }\n\n    hide();\n    new MutationObserver(hide).observe(document.body, { childList: true, subtree: true });\n}" 
+            } ]
         },
         {
             "id": "lookup-task",
@@ -19,7 +22,9 @@ document.addEventListener("DOMContentLoaded", async () => {
             "type": "plugin",
             "config": { "lookupMode": "highlighted" },
             "configSchema": [ { "id": "lookupMode", "type": "select", "label": "Lookup with", "options": [ { "value": "clipboard", "label": "from clipboard" }, { "value": "highlighted", "label": "from highlighted text" } ] } ],
-            "commands": { "lookup_task": "const { plugin_settings_lookup_task: config } = await chrome.storage.local.get('plugin_settings_lookup_task'); const mode = config?.lookupMode || 'highlighted'; let text = (mode === 'clipboard') ? await navigator.clipboard.readText() : window.getSelection().toString().trim(); if (text.match(/[A-Za-z0-9]/g) && text.length === 24) { window.open(`https://app.outlier.ai/en/expert/outlieradmin/tools/lookup/${text}#View%20Responses`, '_blank'); } else { alert('Not a valid ID: ' + text); }" }
+            "commands": { 
+                "lookup_task": "const { plugin_settings_lookup_task: config } = await chrome.storage.local.get('plugin_settings_lookup_task');\nconst mode = config?.lookupMode || 'highlighted';\n\nlet text = (mode === 'clipboard') \n    ? await navigator.clipboard.readText() \n    : window.getSelection().toString().trim();\n\nif (text.match(/[A-Za-z0-9]/g) && text.length === 24) {\n    window.open(`https://app.outlier.ai/en/expert/outlieradmin/tools/lookup/${text}#View%20Responses`, '_blank');\n} else {\n    alert('Not a valid ID: ' + text);\n}" 
+            }
         }
     ];
 
@@ -31,6 +36,17 @@ document.addEventListener("DOMContentLoaded", async () => {
             finalTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
         }
         document.documentElement.className = finalTheme;
+        
+        // Update all existing CodeMirror instances to match the new theme
+        const cmTheme = finalTheme === 'dark' ? 'monokai' : 'juejin';
+        document.querySelectorAll('.CodeMirror').forEach(cmDiv => {
+            const cmInstance = cmDiv.CodeMirror;
+            if (cmInstance) {
+                cmInstance.setOption('theme', cmTheme);
+                // Force a full refresh to fix layout/highlighting issues
+                cmInstance.refresh();
+            }
+        });
     }
 
     async function render() {
@@ -113,11 +129,17 @@ document.addEventListener("DOMContentLoaded", async () => {
                     editorContainer.classList.remove('hidden');
                     pluginActions.classList.add('hidden');
                     
+                    const currentTheme = document.documentElement.className;
                     const jsonTextArea = card.querySelector('.json-tab .editor');
-                    const cmJson = CodeMirror.fromTextArea(jsonTextArea, {
-                        mode: "application/json",
+                    const cmOptions = {
                         lineNumbers: true,
-                        theme: document.documentElement.className === 'dark' ? 'default' : 'default'
+                        lineWrapping: true,
+                        theme: currentTheme.includes('dark') ? 'monokai' : 'juejin'
+                    };
+
+                    const cmJson = CodeMirror.fromTextArea(jsonTextArea, {
+                        ...cmOptions,
+                        mode: "application/json"
                     });
 
                     // Content Scripts Tab
@@ -132,8 +154,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                             `;
                             scriptsEditorsList.appendChild(div);
                             CodeMirror.fromTextArea(div.querySelector('textarea'), {
-                                mode: "javascript",
-                                lineNumbers: true
+                                ...cmOptions,
+                                mode: "javascript"
                             });
                         });
                     } else {
@@ -152,8 +174,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                             `;
                             commandEditorsList.appendChild(div);
                             CodeMirror.fromTextArea(div.querySelector('textarea'), {
-                                mode: "javascript",
-                                lineNumbers: true
+                                ...cmOptions,
+                                mode: "javascript"
                             });
                         });
                     } else {
@@ -169,6 +191,11 @@ document.addEventListener("DOMContentLoaded", async () => {
                         card.querySelector('.json-tab').classList.toggle('hidden', tab !== 'json');
                         card.querySelector('.scripts-tab').classList.toggle('hidden', tab !== 'scripts');
                         card.querySelector('.commands-tab').classList.toggle('hidden', tab !== 'commands');
+
+                        // Refresh CodeMirror instances in the newly visible tab
+                        card.querySelectorAll(`.tab-content:not(.hidden) .CodeMirror`).forEach(cmDiv => {
+                            cmDiv.CodeMirror.refresh();
+                        });
                     };
                 });
 

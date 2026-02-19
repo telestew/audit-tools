@@ -6,29 +6,31 @@
     <link rel="stylesheet" href="theme.css">
     <link rel="stylesheet" href="manager.css">
     <link rel="stylesheet" href="lib/codemirror/codemirror.css">
+    <link rel="stylesheet" href="lib/codemirror/theme/juejin.css">
+    <link rel="stylesheet" href="lib/codemirror/theme/monokai.css">
 </head>
 <body>
-    <div class="centered">
-        <h1 style="font-size: 2.5em; margin-bottom: 10px;">Plugin Manager</h1>
-        <div class="theme-selector">
-            Theme:
-            <label><input type="radio" name="theme" value="light"> Light</label>
-            <label><input type="radio" name="theme" value="dark"> Dark</label>
-            <label><input type="radio" name="theme" value="auto"> Auto</label>
+    <div class="centered" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h1 style="font-size: 2.5em; margin: 0;">Plugin Manager</h1>
+        <div class="actions" style="margin: 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: flex-end;">
+            <button id="add-plugin">Add New Plugin</button>
+            <button id="add-group">Add Group Label</button>
+            <button id="export-all" class="secondary">Export All</button>
+            <label for="import-file" class="button secondary" style="margin: 0;">Import Plugins</label>
+            <input type="file" id="import-file" class="hidden" accept=".json">
+            <button id="restore-defaults" class="secondary">Restore Defaults</button>
+            <button id="clear-all-data" class="danger">Clear All Data</button>
         </div>
+    </div>
+    <div class="theme-selector" style="margin-bottom: 20px;">
+        Theme:
+        <label><input type="radio" name="theme" value="light"> Light</label>
+        <label><input type="radio" name="theme" value="dark"> Dark</label>
+        <label><input type="radio" name="theme" value="auto"> Auto</label>
     </div>
     <div id="plugin-list"></div>
     <script src="lib/codemirror/codemirror.js"></script>
-    <script src="lib/codemirror/javascript.js"></script>
-    <div class="centered actions" style="margin-top: 30px;">
-        <button id="add-plugin">Add New Plugin</button>
-        <button id="add-group">Add Group Label</button>
-        <button id="export-all" class="secondary">Export All</button>
-        <label for="import-file" class="button secondary">Import Plugins</label>
-        <input type="file" id="import-file" class="hidden" accept=".json">
-        <button id="restore-defaults" class="secondary">Restore Defaults</button>
-        <button id="clear-all-data" class="danger">Clear All Data</button>
-    </div>
+    <script src="lib/codemirror/mode/javascript.js"></script>
     <script src="manager.js"></script>
 </body>
 </html>
