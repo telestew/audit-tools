@@ -34,7 +34,7 @@
             "description": "Looks up task attempt by related object ID"
         }
     },
-    "host_permissions": ["<all_urls>"],
+    "host_permissions": ["<all_urls>", "chrome-extension://*"],
     "action": {
         "default_popup": "popup.html",
         "default_icon": {

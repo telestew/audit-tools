@@ -5,72 +5,87 @@ document.addEventListener("DOMContentLoaded", async () => {
     const settingsContainer = document.querySelector('.settings');
     settingsContainer.innerHTML = '';
 
-    for (const plugin of plugins) {
-        if (!plugin.enabled || !plugin.configSchema) continue;
+    let currentGroupElement = null;
 
-        const pluginHeader = document.createElement('h4');
-        pluginHeader.textContent = plugin.name;
-        settingsContainer.appendChild(pluginHeader);
+    for (const item of plugins) {
+        if (item.type === 'group') {
+            currentGroupElement = document.createElement('div');
+            currentGroupElement.className = 'plugin-group';
+            const groupHeader = document.createElement('h4');
+            groupHeader.textContent = item.name;
+            currentGroupElement.appendChild(groupHeader);
+            settingsContainer.appendChild(currentGroupElement);
+        } else if (item.type === 'plugin' && item.enabled && item.configSchema) {
+            const targetContainer = currentGroupElement || settingsContainer;
 
-        const storageKey = `plugin_settings_${plugin.id.replace(/-/g, '_')}`;
-        const stored = await chrome.storage.local.get(storageKey);
-        const pluginSettings = stored[storageKey] || {};
+            const pluginHeader = document.createElement('h5'); // Changed to h5 for nested hierarchy
+            pluginHeader.textContent = item.name;
+            targetContainer.appendChild(pluginHeader);
 
-        plugin.configSchema.forEach(field => {
-            const container = document.createElement('label');
-            container.className = field.type === 'toggle' ? 'toggle-container' : '';
-            if (field.type !== 'toggle') {
-                container.setAttribute('for', `${plugin.id}_${field.id}`);
-                container.textContent = field.label;
-                container.style.marginLeft = '25px';
-                container.style.marginTop = '10px';
-                container.style.display = 'block';
-            }
+            const storageKey = `plugin_settings_${item.id.replace(/-/g, '_')}`;
+            const stored = await chrome.storage.local.get(storageKey);
+            const pluginSettings = stored[storageKey] || {};
 
-            let input;
-            if (field.type === 'toggle') {
-                container.innerHTML = `&emsp;&emsp;<input type="checkbox" id="${plugin.id}_${field.id}"><span class="toggle-slider"></span><span class="toggle-label">${field.label}</span>`;
-                input = container.querySelector('input');
-                input.checked = pluginSettings[field.id] !== undefined ? pluginSettings[field.id] : (plugin.config[field.id]);
-            } else if (field.type === 'select') {
-                input = document.createElement('select');
-                input.id = `${plugin.id}_${field.id}`;
-                field.options.forEach(opt => {
-                    const o = document.createElement('option');
-                    o.value = opt.value;
-                    o.textContent = opt.label;
-                    input.appendChild(o);
-                });
-                input.value = pluginSettings[field.id] || plugin.config[field.id];
-                input.style.marginLeft = '55px';
-            } else if (field.type === 'number') {
-                input = document.createElement('input');
-                input.type = 'number';
-                input.id = `${plugin.id}_${field.id}`;
-                input.min = field.min;
-                input.max = field.max;
-                input.value = pluginSettings[field.id] || plugin.config[field.id];
-                input.style.marginLeft = '60px';
-                input.style.width = '40px';
-            }
+            item.configSchema.forEach(field => {
+                const container = document.createElement('label');
+                container.className = field.type === 'toggle' ? 'toggle-container' : '';
+                if (field.type !== 'toggle') {
+                    container.setAttribute('for', `${item.id}_${field.id}`);
+                    container.textContent = field.label;
+                    container.style.marginLeft = '25px';
+                    container.style.marginTop = '10px';
+                    container.style.display = 'block';
+                }
 
-            settingsContainer.appendChild(container);
-            if (field.type !== 'toggle') settingsContainer.appendChild(input);
-        });
+                let input;
+                if (field.type === 'toggle') {
+                    container.innerHTML = `&emsp;&emsp;<input type="checkbox" id="${item.id}_${field.id}"><span class="toggle-slider"></span><span class="toggle-label">${field.label}</span>`;
+                    input = container.querySelector('input');
+                    input.checked = pluginSettings[field.id] !== undefined ? pluginSettings[field.id] : (item.config[field.id]);
+                } else if (field.type === 'select') {
+                    input = document.createElement('select');
+                    input.id = `${item.id}_${field.id}`;
+                    field.options.forEach(opt => {
+                        const o = document.createElement('option');
+                        o.value = opt.value;
+                        o.textContent = opt.label;
+                        input.appendChild(o);
+                    });
+                    input.value = pluginSettings[field.id] || item.config[field.id];
+                    input.style.marginLeft = '55px';
+                } else if (field.type === 'number') {
+                    input = document.createElement('input');
+                    input.type = 'number';
+                    input.id = `${item.id}_${field.id}`;
+                    input.min = field.min;
+                    input.max = field.max;
+                    input.value = pluginSettings[field.id] || item.config[field.id];
+                    input.style.marginLeft = '60px';
+                    input.style.width = '40px';
+                }
+
+                targetContainer.appendChild(container);
+                if (field.type !== 'toggle') targetContainer.appendChild(input);
+            });
+        }
     }
 
     document.getElementById("save").addEventListener("click", async () => {
-        for (const plugin of plugins) {
-            if (!plugin.enabled || !plugin.configSchema) continue;
-            const newSettings = {};
-            plugin.configSchema.forEach(field => {
-                const el = document.getElementById(`${plugin.id}_${field.id}`);
-                if (field.type === 'toggle') newSettings[field.id] = el.checked;
-                else if (field.type === 'number') newSettings[field.id] = parseInt(el.value);
-                else newSettings[field.id] = el.value;
-            });
-            const storageKey = `plugin_settings_${plugin.id.replace(/-/g, '_')}`;
-            await chrome.storage.local.set({ [storageKey]: newSettings });
+        const { plugins } = await chrome.storage.local.get('plugins');
+        for (const item of plugins) {
+            if (item.type === 'plugin' && item.enabled && item.configSchema) {
+                const newSettings = {};
+                item.configSchema.forEach(field => {
+                    const el = document.getElementById(`${item.id}_${field.id}`);
+                    if (el) { // Ensure element exists before trying to read its value
+                        if (field.type === 'toggle') newSettings[field.id] = el.checked;
+                        else if (field.type === 'number') newSettings[field.id] = parseInt(el.value);
+                        else newSettings[field.id] = el.value;
+                    }
+                });
+                const storageKey = `plugin_settings_${item.id.replace(/-/g, '_')}`;
+                await chrome.storage.local.set({ [storageKey]: newSettings });
+            }
         }
         alert("Settings saved!");
     });

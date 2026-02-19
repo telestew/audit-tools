@@ -118,6 +118,23 @@ select:focus {
     background: #f0f0f0;
 }
 
+h4 {
+    font-size: 1.5em;
+    margin-bottom: 10px;
+    color: #222;
+    border-bottom: 1px solid #ccc; /* Separator for groups */
+    padding-bottom: 5px;
+    margin-top: 20px;
+}
+
+h5 { /* For plugin names within groups */
+    font-size: 1.1em;
+    margin-top: 15px;
+    margin-bottom: 5px;
+    margin-left: 15px;
+    color: #333;
+}
+
 /* Button Styling */
 button {
     width: 40%;
