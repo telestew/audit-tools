@@ -1,23 +1,24 @@
 {
-  "id": "hide-external-feedback",
-  "name": "Hide External Feedback",
-  "enabled": true,
   "config": {
     "enabled": true
   },
   "configSchema": [
     {
       "id": "enabled",
-      "type": "toggle",
-      "label": "Hide 'External Feedback'"
+      "label": "Hide 'External Feedback'",
+      "type": "toggle"
     }
   ],
   "contentScripts": [
     {
+      "code": "const { plugin_settings_hide_external_feedback: config } =\n  await chrome.storage.local.get(\"plugin_settings_hide_external_feedback\");\n\nif (config?.enabled !== false) {\n  function hide() {\n    const xpath =\n      \"//p[text()='Task Feedback for Contributor (External)']/parent::*/parent::div\";\n    const result = document.evaluate(\n      xpath,\n      document,\n      null,\n      XPathResult.FIRST_ORDERED_NODE_TYPE,\n      null,\n    );\n    const div = result.singleNodeValue;\n    if (div) div.style.display = \"none\";\n  }\n\n  hide();\n  new MutationObserver(hide).observe(document.body, {\n    childList: true,\n    subtree: true,\n  });\n}\n",
       "matches": [
         "https://app.outlier.ai/en/expert/outlieradmin/tools/chat_bulk_audit/*"
-      ],
-      "code": "const { plugin_settings_hide_external_feedback: config } = await chrome.storage.local.get('plugin_settings_hide_external_feedback'); if (config?.enabled !== false) { function hide() { const xpath = \"//p[text()='Task Feedback for Contributor (External)']/parent::*/parent::div\"; const result = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null); const div = result.singleNodeValue; if (div) div.style.display = 'none'; } hide(); new MutationObserver(hide).observe(document.body, { childList: true, subtree: true }); }"
+      ]
     }
-  ]
+  ],
+  "enabled": true,
+  "id": "hide-external-feedback",
+  "name": "Hide External Feedback",
+  "type": "plugin"
 }
