@@ -1,63 +1,6 @@
 document.addEventListener("DOMContentLoaded", async () => {
     const list = document.getElementById('plugin-list');
 
-    // Default Plugins
-    const DEFAULT_PLUGINS_DATA = [
-        {
-	    "config": {
-		"enabled": true
-	    },
-	    "configSchema": [
-		{
-		    "id": "enabled",
-		    "label": "Hide 'External Feedback'",
-		    "type": "toggle"
-		}
-	    ],
-	    "contentScripts": [
-		{
-		    "code": "const { plugin_settings_hide_external_feedback: config } =\n  await chrome.storage.local.get(\"plugin_settings_hide_external_feedback\");\n\nif (config?.enabled !== false) {\n  function hide() {\n    const xpath =\n      \"//p[text()='Task Feedback for Contributor (External)']/parent::*/parent::div\";\n    const result = document.evaluate(\n      xpath,\n      document,\n      null,\n      XPathResult.FIRST_ORDERED_NODE_TYPE,\n      null,\n    );\n    const div = result.singleNodeValue;\n    if (div) div.style.display = \"none\";\n  }\n\n  hide();\n  new MutationObserver(hide).observe(document.body, {\n    childList: true,\n    subtree: true,\n  });\n}\n",
-		    "matches": [
-			"https://app.outlier.ai/en/expert/outlieradmin/tools/chat_bulk_audit/*"
-		    ]
-		}
-	    ],
-	    "enabled": true,
-	    "id": "hide-external-feedback",
-	    "name": "Hide External Feedback",
-	    "type": "plugin"
-	},
-	{
-	    "commands": {
-		"lookup_task": "const { plugin_settings_lookup_task: config } = await chrome.storage.local.get('plugin_settings_lookup_task');\nconst mode = config?.lookupMode || 'highlighted';\n\nlet text = (mode === 'clipboard') \n    ? await navigator.clipboard.readText() \n    : window.getSelection().toString().trim();\n\nif (text.match(/[A-Za-z0-9]/g) && text.length === 24) {\n    window.open(`https://app.outlier.ai/en/expert/outlieradmin/tools/lookup/${text}#View%20Responses`, '_blank');\n} else {\n    alert('Not a valid ID: ' + text);\n}"
-	    },
-	    "config": {
-		"lookupMode": "highlighted"
-	    },
-	    "configSchema": [
-		{
-		    "id": "lookupMode",
-		    "label": "Lookup with",
-		    "options": [
-			{
-			    "label": "from clipboard",
-			    "value": "clipboard"
-			},
-			{
-			    "label": "from highlighted text",
-			    "value": "highlighted"
-			}
-		    ],
-		    "type": "select"
-		}
-	    ],
-	    "enabled": true,
-	    "id": "lookup-task",
-	    "name": "Lookup Task",
-	    "type": "plugin"
-	}	
-    ];
-
     let draggedItem = null;
 
     async function applyTheme(theme) {
@@ -85,11 +28,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         const chromeCommands = await new Promise(resolve => chrome.commands.getAll(resolve));
         const getShortcut = (name) => chromeCommands.find(c => c.name === name)?.shortcut || 'Not set';
         
-        if (!shortcutMappings['kb_command_1'] && plugins.some(p => p.id === 'lookup-task')) {
-            shortcutMappings['kb_command_1'] = 'lookup-task:lookup_task';
-            await chrome.storage.local.set({ shortcutMappings });
-        }
-
         applyTheme(theme);
         const themeRadio = document.querySelector(`input[name="theme"][value="${theme}"]`);
         if (themeRadio) themeRadio.checked = true;
@@ -462,15 +400,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     document.getElementById('restore-defaults').onclick = async () => {
         if (confirm('Are you sure you want to restore default plugins? This will overwrite your current plugin list.')) {
-            await chrome.storage.local.set({ plugins: DEFAULT_PLUGINS_DATA });
-            // Also reset their individual settings to default
-            for (const p of DEFAULT_PLUGINS_DATA) {
-                if (p.type === 'plugin' && p.config) {
-                     await chrome.storage.local.set({ [`plugin_settings_${p.id.replace(/-/g,'_')}`]: p.config });
+            chrome.runtime.sendMessage({ action: 'restoreDefaults' }, (response) => {
+                if (response?.success) {
+                    alert('Default plugins restored!');
+                    render();
                 }
-            }
-            alert('Default plugins restored!');
-            render();
+            });
         }
     };
 

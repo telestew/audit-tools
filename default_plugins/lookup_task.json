@@ -1,0 +1,29 @@
+{
+  "commands": {
+    "lookup_task": "const { plugin_settings_lookup_task: config } = await chrome.storage.local.get('plugin_settings_lookup_task');\nconst mode = config?.lookupMode || 'highlighted';\n\nlet text = (mode === 'clipboard') \n    ? await navigator.clipboard.readText() \n    : window.getSelection().toString().trim();\n\nif (text.match(/[A-Za-z0-9]/g) && text.length === 24) {\n    window.open(`https://app.outlier.ai/en/expert/outlieradmin/tools/lookup/${text}#View%20Responses`, '_blank');\n} else {\n    alert('Not a valid ID: ' + text);\n}"
+  },
+  "config": {
+    "lookupMode": "highlighted"
+  },
+  "configSchema": [
+    {
+      "id": "lookupMode",
+      "label": "Lookup with",
+      "options": [
+        {
+          "label": "from clipboard",
+          "value": "clipboard"
+        },
+        {
+          "label": "from highlighted text",
+          "value": "highlighted"
+        }
+      ],
+      "type": "select"
+    }
+  ],
+  "enabled": true,
+  "id": "lookup-task-default",
+  "name": "Lookup Task",
+  "type": "plugin"
+}

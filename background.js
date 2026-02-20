@@ -1,7 +1,45 @@
 chrome.runtime.onInstalled.addListener(async () => {
     const { plugins } = await chrome.storage.local.get('plugins');
-    if (!plugins) {
-        await chrome.storage.local.set({ plugins: [] });
+    if (!plugins || plugins.length === 0) {
+        await restoreDefaultPlugins();
+    }
+});
+
+async function restoreDefaultPlugins() {
+    const defaultFiles = [
+        'hide_external_feedback.json',
+        'lookup_task.json'
+    ];
+
+    const plugins = [];
+    for (const file of defaultFiles) {
+        try {
+            const response = await fetch(chrome.runtime.getURL(`default_plugins/${file}`));
+            const data = await response.json();
+            plugins.push(data);
+            
+            // Set initial settings for the plugin if config exists
+            if (data.id && data.config) {
+                const storageKey = `plugin_settings_${data.id.replace(/-/g, '_')}`;
+                await chrome.storage.local.set({ [storageKey]: data.config });
+            }
+        } catch (e) {
+            console.error(`Failed to load default plugin: ${file}`, e);
+        }
+    }
+
+    // Set default shortcut for lookup_task
+    const { shortcutMappings = {} } = await chrome.storage.local.get('shortcutMappings');
+    shortcutMappings['kb_command_1'] = 'lookup-task-default:lookup_task';
+
+    await chrome.storage.local.set({ plugins, shortcutMappings });
+}
+
+// Add message listener for the Manager page to trigger restoration
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action === 'restoreDefaults') {
+        restoreDefaultPlugins().then(() => sendResponse({ success: true }));
+        return true; 
     }
 });
 
