@@ -14,21 +14,12 @@
 	    "description": "Open command palette"
 	},
         "kb_command_1": {
-            "suggested_key": {
-                "default": "Alt+L"
-            },
             "description": "Configurable Keyboard Shortcut 1"
         },
         "kb_command_2": {
-            "suggested_key": {
-                "default": "Alt+K"
-            },
             "description": "Configurable Keyboard Shortcut 2"
         },
         "kb_command_3": {
-            "suggested_key": {
-                "default": "Alt+O"
-            },
             "description": "Configurable Keyboard Shortcut 3"
         }
     },

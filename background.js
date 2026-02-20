@@ -55,6 +55,55 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 });
 
 chrome.commands.onCommand.addListener(async (command) => {
+    if (command.startsWith('kb_command_')) {
+        const { shortcutMappings = {}, plugins = [] } = await chrome.storage.local.get(['shortcutMappings', 'plugins']);
+        const mapping = shortcutMappings[command];
+        if (!mapping) return;
+
+        const [pluginId, cmdKey] = mapping.split(':');
+        const plugin = plugins.find(p => p.id === pluginId);
+
+        if (plugin && plugin.enabled && plugin.commands && plugin.commands[cmdKey]) {
+            const allStored = await chrome.storage.local.get(null);
+            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                if (!tabs[0]) return;
+                const storageKey = `plugin_settings_${plugin.id.replace(/-/g, '_')}`;
+                chrome.scripting.executeScript({
+                    target: { tabId: tabs[0].id },
+                    world: 'MAIN',
+                    func: (code, storageKey, allData) => {
+                        const script = document.createElement('script');
+                        const nonce = document.querySelector('script[nonce]')?.nonce || document.querySelector('script[nonce]')?.getAttribute('nonce');
+                        if (nonce) script.setAttribute('nonce', nonce);
+                        script.textContent = `(async () => {
+                            const storageKey = "${storageKey}";
+                            const allData = ${JSON.stringify(allData)};
+                            if (!window.chrome) window.chrome = {};
+                            if (!window.chrome.storage) window.chrome.storage = {};
+                            if (!window.chrome.storage.local) window.chrome.storage.local = {
+                                get: (key) => {
+                                    if (!key) return Promise.resolve(allData);
+                                    if (typeof key === 'string') return Promise.resolve({ [key]: allData[key] });
+                                    if (Array.isArray(key)) {
+                                        const res = {};
+                                        key.forEach(k => res[k] = allData[k]);
+                                        return Promise.resolve(res);
+                                    }
+                                    return Promise.resolve(allData);
+                                }
+                            };
+                            try { ${code} } catch (e) { console.error('Command error:', e); }
+                        })();`;
+                        (document.head || document.documentElement).appendChild(script);
+                        script.remove();
+                    },
+                    args: [plugin.commands[cmdKey], storageKey, allStored]
+                });
+            });
+        }
+        return;
+    }
+
     // ─── Command Palette ───
     if (command === 'open_command_palette') {
         const { plugins } = await chrome.storage.local.get('plugins');

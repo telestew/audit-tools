@@ -50,10 +50,37 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     async function render() {
-        const { plugins = [], theme = 'auto' } = await chrome.storage.local.get(['plugins', 'theme']);
+        const { plugins = [], theme = 'auto', shortcutMappings = {} } = await chrome.storage.local.get(['plugins', 'theme', 'shortcutMappings']);
         applyTheme(theme);
         const themeRadio = document.querySelector(`input[name="theme"][value="${theme}"]`);
         if (themeRadio) themeRadio.checked = true;
+
+        const availableCommands = [];
+        plugins.forEach(p => {
+            if (p.enabled && p.commands) {
+                Object.keys(p.commands).forEach(cmd => {
+                    availableCommands.push({ id: `${p.id}:${cmd}`, label: `${p.name}: ${cmd}` });
+                });
+            }
+        });
+
+        ['kb_command_1', 'kb_command_2', 'kb_command_3'].forEach(slotId => {
+            const select = document.getElementById(`slot-${slotId}`);
+            if (!select) return;
+            select.innerHTML = `<option value="">Unassigned (${slotId})</option>`;
+            availableCommands.forEach(cmd => {
+                const opt = document.createElement('option');
+                opt.value = cmd.id;
+                opt.textContent = cmd.label;
+                if (shortcutMappings[slotId] === cmd.id) opt.selected = true;
+                select.appendChild(opt);
+            });
+            select.onchange = async () => {
+                const current = await chrome.storage.local.get('shortcutMappings');
+                const updated = { ...current.shortcutMappings, [slotId]: select.value };
+                await chrome.storage.local.set({ shortcutMappings: updated });
+            };
+        });
 
         list.innerHTML = '';
         plugins.forEach((item, index) => {
@@ -126,11 +153,14 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const pluginActions = card.querySelector('.actions');
 
                 card.querySelector('.edit-btn').onclick = () => {
+                    if (!editorContainer.classList.contains('hidden')) return;
                     editorContainer.classList.remove('hidden');
                     pluginActions.classList.add('hidden');
                     
                     const currentTheme = document.documentElement.className;
-                    const jsonTextArea = card.querySelector('.json-tab .editor');
+                    const jsonTab = card.querySelector('.json-tab');
+                    const jsonTextArea = jsonTab.querySelector('.editor');
+                    jsonTab.querySelectorAll('.CodeMirror').forEach(el => el.remove());
                     const cmOptions = {
                         lineNumbers: true,
                         lineWrapping: true,
