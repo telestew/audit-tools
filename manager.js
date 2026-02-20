@@ -4,28 +4,58 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Default Plugins
     const DEFAULT_PLUGINS_DATA = [
         {
-            "id": "hide-external-feedback",
-            "name": "Hide External Feedback",
-            "enabled": true,
-            "type": "plugin",
-            "config": { "enabled": true },
-            "configSchema": [ { "id": "enabled", "type": "toggle", "label": "Hide 'External Feedback'" } ],
-            "contentScripts": [ { 
-                "matches": ["https://app.outlier.ai/en/expert/outlieradmin/tools/chat_bulk_audit/*"], 
-                "code": "const { plugin_settings_hide_external_feedback: config } = await chrome.storage.local.get('plugin_settings_hide_external_feedback');\n\nif (config?.enabled !== false) {\n    function hide() {\n        const xpath = \"//p[text()='Task Feedback for Contributor (External)']/parent::*/parent::div\";\n        const result = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);\n        const div = result.singleNodeValue;\n        if (div) div.style.display = 'none';\n    }\n\n    hide();\n    new MutationObserver(hide).observe(document.body, { childList: true, subtree: true });\n}" 
-            } ]
-        },
-        {
-            "id": "lookup-task",
-            "name": "Lookup Task",
-            "enabled": true,
-            "type": "plugin",
-            "config": { "lookupMode": "highlighted" },
-            "configSchema": [ { "id": "lookupMode", "type": "select", "label": "Lookup with", "options": [ { "value": "clipboard", "label": "from clipboard" }, { "value": "highlighted", "label": "from highlighted text" } ] } ],
-            "commands": { 
-                "lookup_task": "const { plugin_settings_lookup_task: config } = await chrome.storage.local.get('plugin_settings_lookup_task');\nconst mode = config?.lookupMode || 'highlighted';\n\nlet text = (mode === 'clipboard') \n    ? await navigator.clipboard.readText() \n    : window.getSelection().toString().trim();\n\nif (text.match(/[A-Za-z0-9]/g) && text.length === 24) {\n    window.open(`https://app.outlier.ai/en/expert/outlieradmin/tools/lookup/${text}#View%20Responses`, '_blank');\n} else {\n    alert('Not a valid ID: ' + text);\n}" 
-            }
-        }
+	    "config": {
+		"enabled": true
+	    },
+	    "configSchema": [
+		{
+		    "id": "enabled",
+		    "label": "Hide 'External Feedback'",
+		    "type": "toggle"
+		}
+	    ],
+	    "contentScripts": [
+		{
+		    "code": "const { plugin_settings_hide_external_feedback: config } =\n  await chrome.storage.local.get(\"plugin_settings_hide_external_feedback\");\n\nif (config?.enabled !== false) {\n  function hide() {\n    const xpath =\n      \"//p[text()='Task Feedback for Contributor (External)']/parent::*/parent::div\";\n    const result = document.evaluate(\n      xpath,\n      document,\n      null,\n      XPathResult.FIRST_ORDERED_NODE_TYPE,\n      null,\n    );\n    const div = result.singleNodeValue;\n    if (div) div.style.display = \"none\";\n  }\n\n  hide();\n  new MutationObserver(hide).observe(document.body, {\n    childList: true,\n    subtree: true,\n  });\n}\n",
+		    "matches": [
+			"https://app.outlier.ai/en/expert/outlieradmin/tools/chat_bulk_audit/*"
+		    ]
+		}
+	    ],
+	    "enabled": true,
+	    "id": "hide-external-feedback",
+	    "name": "Hide External Feedback",
+	    "type": "plugin"
+	},
+	{
+	    "commands": {
+		"lookup_task": "const { plugin_settings_lookup_task: config } = await chrome.storage.local.get('plugin_settings_lookup_task');\nconst mode = config?.lookupMode || 'highlighted';\n\nlet text = (mode === 'clipboard') \n    ? await navigator.clipboard.readText() \n    : window.getSelection().toString().trim();\n\nif (text.match(/[A-Za-z0-9]/g) && text.length === 24) {\n    window.open(`https://app.outlier.ai/en/expert/outlieradmin/tools/lookup/${text}#View%20Responses`, '_blank');\n} else {\n    alert('Not a valid ID: ' + text);\n}"
+	    },
+	    "config": {
+		"lookupMode": "highlighted"
+	    },
+	    "configSchema": [
+		{
+		    "id": "lookupMode",
+		    "label": "Lookup with",
+		    "options": [
+			{
+			    "label": "from clipboard",
+			    "value": "clipboard"
+			},
+			{
+			    "label": "from highlighted text",
+			    "value": "highlighted"
+			}
+		    ],
+		    "type": "select"
+		}
+	    ],
+	    "enabled": true,
+	    "id": "lookup-task",
+	    "name": "Lookup Task",
+	    "type": "plugin"
+	}	
     ];
 
     let draggedItem = null;
@@ -51,6 +81,15 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     async function render() {
         const { plugins = [], theme = 'auto', shortcutMappings = {} } = await chrome.storage.local.get(['plugins', 'theme', 'shortcutMappings']);
+
+        const chromeCommands = await new Promise(resolve => chrome.commands.getAll(resolve));
+        const getShortcut = (name) => chromeCommands.find(c => c.name === name)?.shortcut || 'Not set';
+        
+        if (!shortcutMappings['kb_command_1'] && plugins.some(p => p.id === 'lookup-task')) {
+            shortcutMappings['kb_command_1'] = 'lookup-task:lookup_task';
+            await chrome.storage.local.set({ shortcutMappings });
+        }
+
         applyTheme(theme);
         const themeRadio = document.querySelector(`input[name="theme"][value="${theme}"]`);
         if (themeRadio) themeRadio.checked = true;
@@ -67,7 +106,19 @@ document.addEventListener("DOMContentLoaded", async () => {
         ['kb_command_1', 'kb_command_2', 'kb_command_3'].forEach(slotId => {
             const select = document.getElementById(`slot-${slotId}`);
             if (!select) return;
-            select.innerHTML = `<option value="">Unassigned (${slotId})</option>`;
+
+            const slotKey = getShortcut(slotId);
+            let labelSpan = document.getElementById(`label-${slotId}`);
+            if (!labelSpan) {
+                labelSpan = document.createElement('span');
+                labelSpan.id = `label-${slotId}`;
+                labelSpan.style.fontSize = '0.8em';
+                labelSpan.style.color = 'var(--secondary-text-color)';
+                select.after(labelSpan);
+            }
+            labelSpan.textContent = ` (${slotKey})`;
+
+            select.innerHTML = `<option value="">Unassigned</option>`;
             availableCommands.forEach(cmd => {
                 const opt = document.createElement('option');
                 opt.value = cmd.id;
@@ -86,6 +137,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         plugins.forEach((item, index) => {
             const card = document.createElement('div');
             card.className = item.type === 'group' ? 'plugin-card group-card' : 'plugin-card';
+            if (item.type === 'plugin' && !item.enabled) card.classList.add('disabled');
             card.draggable = true;
             card.dataset.index = index;
 
@@ -114,7 +166,13 @@ document.addEventListener("DOMContentLoaded", async () => {
                             <span class="plugin-id">ID: ${item.id}</span>
                         </div>
                         <div class="actions">
-                            <button class="toggle-btn">${item.enabled ? 'Disable' : 'Enable'}</button>
+                            <label class="switch-container" style="display:flex; align-items:center; gap:8px;">
+                                <span style="font-size: 12px; font-weight: bold;">Plugin Active</span>
+                                <label class="switch">
+                                    <input type="checkbox" class="toggle-plugin" ${item.enabled ? 'checked' : ''}>
+                                    <span class="slider"></span>
+                                </label>
+                            </label>
                             <button class="edit-btn secondary">Edit</button>
                             <button class="delete-btn danger">Delete</button>
                         </div>
@@ -141,8 +199,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                     </div>
                 `;
 
-                card.querySelector('.toggle-btn').onclick = async () => {
-                    item.enabled = !item.enabled;
+                card.querySelector('.toggle-plugin').onchange = async (e) => {
+                    item.enabled = e.target.checked;
                     await savePlugins(plugins);
                 };
                 

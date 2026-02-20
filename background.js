@@ -108,6 +108,7 @@ chrome.commands.onCommand.addListener(async (command) => {
     if (command === 'open_command_palette') {
         const { plugins } = await chrome.storage.local.get('plugins');
         const allStored = await chrome.storage.local.get(null);
+        const chromeCommands = await chrome.commands.getAll();
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (!tab) return;
 
@@ -128,7 +129,7 @@ chrome.commands.onCommand.addListener(async (command) => {
         chrome.scripting.executeScript({
             target: { tabId: tab.id },
             world: 'MAIN',
-            func: (commands, allData) => {
+            func: (commands, allData, shortcuts) => {
                 // Toggle off if already open
                 const existing = document.getElementById('fje-cmd-palette-overlay');
                 if (existing) {
@@ -194,7 +195,19 @@ chrome.commands.onCommand.addListener(async (command) => {
                     filtered.forEach((cmd, i) => {
                         const li = document.createElement('li');
                         li.className = 'fje-cmd-item' + (i === activeIndex ? ' fje-active' : '');
-                        li.innerHTML = '<span class="fje-cmd-name">' + fmt(cmd.command) + '</span><span class="fje-cmd-plugin">' + cmd.pluginName + '</span>';
+                        
+                        const mappingEntries = Object.entries(allData.shortcutMappings || {});
+                        const slotName = mappingEntries.find(([k, v]) => v === `${cmd.pluginId}:${cmd.command}`)?.[0];
+                        const actualKey = shortcuts.find(s => s.name === slotName)?.shortcut || '';
+
+                        li.innerHTML = `
+                            <span class="fje-cmd-name">${fmt(cmd.command)}</span>
+                            <div style="display:flex; align-items:center;">
+                                ${actualKey ? `<span style="color:#aaa; font-size:10px; margin-right:10px; border:1px solid #454545; padding:2px 4px; border-radius:3px;">${actualKey}</span>` : ''}
+                                <span class="fje-cmd-plugin">${cmd.pluginName}</span>
+                            </div>
+                        `;
+
                         li.addEventListener('click', () => run(cmd));
                         li.addEventListener('mouseenter', () => {
                             activeIndex = i;
@@ -272,7 +285,7 @@ chrome.commands.onCommand.addListener(async (command) => {
                 render();
                 input.focus();
             },
-            args: [availableCommands, allStored]
+            args: [availableCommands, allStored, chromeCommands]
         });
         return;
     }
@@ -332,3 +345,4 @@ chrome.cookies.onChanged.addListener((changeInfo) => {
     if (changeInfo.cookie.name === '_csrf' && changeInfo.cookie.domain.includes('outlier.ai')) updateCsrfToken();
 });
 updateCsrfToken();
+

@@ -55,15 +55,23 @@ document.addEventListener("DOMContentLoaded", async () => {
                     });
                     input.value = pluginSettings[field.id] || item.config[field.id];
                     input.style.marginLeft = '55px';
+                } else if (field.type === 'text') {
+                    input = document.createElement('input');
+                    input.type = 'text';
+                    input.id = `${item.id}_${field.id}`;
+                    input.value = pluginSettings[field.id] !== undefined ? pluginSettings[field.id] : (item.config[field.id] || '');
+                    input.style.marginLeft = '25px';
+                    input.style.width = 'calc(100% - 60px)';
                 } else if (field.type === 'number') {
                     input = document.createElement('input');
                     input.type = 'number';
                     input.id = `${item.id}_${field.id}`;
-                    input.min = field.min;
-                    input.max = field.max;
-                    input.value = pluginSettings[field.id] || item.config[field.id];
+                    if (field.min !== undefined) input.min = field.min;
+                    if (field.max !== undefined) input.max = field.max;
+                    if (field.step !== undefined) input.step = field.step; // Support floats like 0.1
+                    input.value = pluginSettings[field.id] !== undefined ? pluginSettings[field.id] : (item.config[field.id]);
                     input.style.marginLeft = '60px';
-                    input.style.width = '40px';
+                    input.style.width = '50px';
                 }
 
                 targetContainer.appendChild(container);
@@ -81,7 +89,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     const el = document.getElementById(`${item.id}_${field.id}`);
                     if (el) { // Ensure element exists before trying to read its value
                         if (field.type === 'toggle') newSettings[field.id] = el.checked;
-                        else if (field.type === 'number') newSettings[field.id] = parseInt(el.value);
+                        else if (field.type === 'number') newSettings[field.id] = parseFloat(el.value);
                         else newSettings[field.id] = el.value;
                     }
                 });
@@ -90,6 +98,23 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         }
         alert("Settings saved!");
+    });
+
+    chrome.storage.onChanged.addListener((changes) => {
+        // If settings changed in background (via command), refresh UI
+        for (let key in changes) {
+            if (key.startsWith('plugin_settings_')) {
+                const pluginId = key.replace('plugin_settings_', '').replace(/_/g, '-');
+                const newVals = changes[key].newValue;
+                for (let fieldId in newVals) {
+                    const el = document.getElementById(`${pluginId}_${fieldId}`);
+                    if (el) {
+                        if (el.type === 'checkbox') el.checked = newVals[fieldId];
+                        else el.value = newVals[fieldId];
+                    }
+                }
+            }
+        }
     });
 });
 
