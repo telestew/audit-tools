@@ -9,6 +9,10 @@
     },
     "options_page": "manager.html",
     "commands": {
+	"open_command_palette": {
+	    "suggested_key": { "default": "Alt+P" },
+	    "description": "Open command palette"
+	},
         "lookup_task": {
             "suggested_key": {
                 "default": "Alt+L"
@@ -26,15 +30,9 @@
                 "default": "Alt+O"
             },
             "description": "Creates batch operation from clipboard IDs" 
-        },
-        "lookup_attempt": {
-            "suggested_key": {
-                "default": "Alt+A"
-            },
-            "description": "Looks up task attempt by related object ID"
         }
     },
-    "host_permissions": ["<all_urls>", "chrome-extension://*"],
+    "host_permissions": ["<all_urls>"],
     "action": {
         "default_popup": "popup.html",
         "default_icon": {
