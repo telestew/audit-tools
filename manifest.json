@@ -13,23 +13,23 @@
 	    "suggested_key": { "default": "Alt+P" },
 	    "description": "Open command palette"
 	},
-        "lookup_task": {
+        "kb_command_1": {
             "suggested_key": {
                 "default": "Alt+L"
             },
-            "description": "Looks up task in Outlier by ID"
+            "description": "Configurable Keyboard Shortcut 1"
         },
-        "lookup_project": {
+        "kb_command_2": {
             "suggested_key": {
                 "default": "Alt+K"
             },
-            "description": "Looks up project in OpsHub by ID"
+            "description": "Configurable Keyboard Shortcut 2"
         },
-        "create_operation_from_clipboard": {
+        "kb_command_3": {
             "suggested_key": {
                 "default": "Alt+O"
             },
-            "description": "Creates batch operation from clipboard IDs" 
+            "description": "Configurable Keyboard Shortcut 3"
         }
     },
     "host_permissions": ["<all_urls>"],
