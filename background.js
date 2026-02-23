@@ -35,16 +35,37 @@ async function restoreDefaultPlugins() {
     await chrome.storage.local.set({ plugins, shortcutMappings });
 }
 
-// Add message listener for the Manager page to trigger restoration
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.action === 'restoreDefaults') {
-        restoreDefaultPlugins().then(() => sendResponse({ success: true }));
-        return true; 
-    }
-});
 
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     if (changeInfo.status === 'complete' && tab.url) {
+        // Inject ISOLATED world bridge for AI chat fetch proxy
+        if (/^https:\/\/www\.desmos\.com\/calculator/.test(tab.url)) {
+            chrome.scripting.executeScript({
+                target: { tabId },
+                world: 'ISOLATED',
+                func: () => {
+                    if (window.__daiBridgeInstalled) return;
+                    window.__daiBridgeInstalled = true;
+                    window.addEventListener('message', (evt) => {
+                        if (evt.source !== window) return;
+                        if (evt.data?.type === 'dai-fetch-stream') {
+                            chrome.runtime.sendMessage({
+                                action: 'dai-fetch-stream',
+                                url: evt.data.url,
+                                options: evt.data.options
+                            }, (response) => {
+                                window.postMessage({
+                                    type: 'dai-fetch-response',
+                                    id: evt.data.id,
+                                    response: response
+                                }, '*');
+                            });
+                        }
+                    });
+                }
+            });
+        }
+
         const { plugins } = await chrome.storage.local.get('plugins');
         if (!plugins) return;
         const allStored = await chrome.storage.local.get(null);
@@ -371,6 +392,32 @@ chrome.commands.onCommand.addListener(async (command) => {
                 });
             });
         }
+    }
+});
+
+// --- AI Chat fetch proxy (avoids CORS for local API) ---
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action === 'dai-fetch-stream') {
+        const { url, options } = message;
+        fetch(url, {
+            method: options.method || 'POST',
+            headers: options.headers || {},
+            body: options.body || null
+        }).then(async resp => {
+            if (!resp.ok) {
+                sendResponse({ error: 'API error: ' + resp.status });
+                return;
+            }
+            const text = await resp.text();
+            sendResponse({ ok: true, body: text });
+        }).catch(err => {
+            sendResponse({ error: err.message });
+        });
+        return true; // keep channel open for async response
+    }
+    if (message.action === 'restoreDefaults') {
+        restoreDefaultPlugins().then(() => sendResponse({ success: true }));
+        return true; 
     }
 });
 
