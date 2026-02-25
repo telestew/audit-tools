@@ -5,6 +5,120 @@ chrome.runtime.onInstalled.addListener(async () => {
     }
 });
 
+// --- Helpers for separated code storage ---
+function codeKeyCS(pluginId, index) {
+    return `plugin_code_${pluginId.replace(/-/g, '_')}_cs_${index}`;
+}
+function codeKeyCMD(pluginId, cmdName) {
+    return `plugin_code_${pluginId.replace(/-/g, '_')}_cmd_${cmdName}`;
+}
+function settingsKey(pluginId) {
+    return `plugin_settings_${pluginId.replace(/-/g, '_')}`;
+}
+
+// Resolve a plugin setting value: stored value > schema default > undefined
+function resolveSettings(pluginId, configSchema, allData) {
+    const sk = settingsKey(pluginId);
+    const stored = allData[sk] || {};
+    const resolved = {};
+    if (configSchema) {
+        configSchema.forEach(field => {
+            resolved[field.id] = stored[field.id] !== undefined ? stored[field.id] : field.default;
+        });
+    }
+    return resolved;
+}
+
+// Store code blobs separately and strip code from plugin JSON
+async function savePluginCode(plugin) {
+    const toStore = {};
+    if (plugin.contentScripts) {
+        for (let i = 0; i < plugin.contentScripts.length; i++) {
+            const cs = plugin.contentScripts[i];
+            if (cs.code !== undefined) {
+                toStore[codeKeyCS(plugin.id, i)] = cs.code;
+            }
+        }
+    }
+    if (plugin.commands) {
+        for (const [cmdName, code] of Object.entries(plugin.commands)) {
+            if (code !== undefined) {
+                toStore[codeKeyCMD(plugin.id, cmdName)] = code;
+            }
+        }
+    }
+    if (Object.keys(toStore).length > 0) {
+        await chrome.storage.local.set(toStore);
+    }
+}
+
+// Get code for a content script
+async function getCSCode(pluginId, index) {
+    const key = codeKeyCS(pluginId, index);
+    const result = await chrome.storage.local.get(key);
+    return result[key] || '';
+}
+
+// Get code for a command
+async function getCMDCode(pluginId, cmdName) {
+    const key = codeKeyCMD(pluginId, cmdName);
+    const result = await chrome.storage.local.get(key);
+    return result[key] || '';
+}
+
+// Remove all code keys for a plugin
+async function removePluginCode(plugin) {
+    const keysToRemove = [];
+    if (plugin.contentScripts) {
+        for (let i = 0; i < plugin.contentScripts.length; i++) {
+            keysToRemove.push(codeKeyCS(plugin.id, i));
+        }
+    }
+    const cmdNames = plugin.commandNames || [];
+    for (const cmdName of cmdNames) {
+        keysToRemove.push(codeKeyCMD(plugin.id, cmdName));
+    }
+    if (keysToRemove.length > 0) {
+        await chrome.storage.local.remove(keysToRemove);
+    }
+}
+
+// Strip code from plugin metadata (for storing in plugins array)
+function stripCodeFromPlugin(plugin) {
+    const clean = { ...plugin };
+    // Remove legacy config object — only configSchema matters
+    delete clean.config;
+    if (clean.contentScripts) {
+        clean.contentScripts = clean.contentScripts.map(cs => {
+            const { code, ...rest } = cs;
+            return rest;
+        });
+    }
+    if (clean.commands) {
+        // Store command names only (as array of keys), code lives in storage
+        clean.commandNames = Object.keys(clean.commands);
+        delete clean.commands;
+    }
+    return clean;
+}
+
+// Save plugin with separated code storage — call this for new/imported plugins
+async function savePluginFull(plugin) {
+    await savePluginCode(plugin);
+    // Set initial settings from schema defaults if not already stored
+    if (plugin.configSchema) {
+        const sk = settingsKey(plugin.id);
+        const existing = await chrome.storage.local.get(sk);
+        if (!existing[sk]) {
+            const defaults = {};
+            plugin.configSchema.forEach(f => {
+                if (f.default !== undefined) defaults[f.id] = f.default;
+            });
+            await chrome.storage.local.set({ [sk]: defaults });
+        }
+    }
+}
+
 async function restoreDefaultPlugins() {
     const defaultFiles = [
         'hide_external_feedback.json',
@@ -16,13 +130,10 @@ async function restoreDefaultPlugins() {
         try {
             const response = await fetch(chrome.runtime.getURL(`default_plugins/${file}`));
             const data = await response.json();
-            plugins.push(data);
-            
-            // Set initial settings for the plugin if config exists
-            if (data.id && data.config) {
-                const storageKey = `plugin_settings_${data.id.replace(/-/g, '_')}`;
-                await chrome.storage.local.set({ [storageKey]: data.config });
-            }
+            // Save code blobs separately and initial settings
+            await savePluginFull(data);
+            // Store stripped metadata
+            plugins.push(stripCodeFromPlugin(data));
         } catch (e) {
             console.error(`Failed to load default plugin: ${file}`, e);
         }
@@ -35,6 +146,59 @@ async function restoreDefaultPlugins() {
     await chrome.storage.local.set({ plugins, shortcutMappings });
 }
 
+
+// Execute plugin code by injecting the pre-built .js file from plugin_scripts/.
+// Files are written by the manager page using File System Access API.
+// This bypasses all CSP/Trusted Types since file-based injection is treated as static content.
+async function executePluginCode(tabId, scriptFile, pluginId, allData) {
+    const sk = settingsKey(pluginId);
+    // First inject the storage shim with current data, then inject the plugin script
+    try {
+        // Inject storage shim into MAIN world so plugin code can access it
+        await chrome.scripting.executeScript({
+            target: { tabId },
+            world: 'MAIN',
+            func: (storageKey, allData) => {
+                window.__pluginStorageKey = storageKey;
+                window.__pluginAllData = allData;
+                if (!window.chrome) window.chrome = {};
+                if (!window.chrome.storage) window.chrome.storage = {};
+                if (!window.chrome.storage.local) window.chrome.storage.local = {
+                    get: (key) => {
+                        const d = window.__pluginAllData;
+                        if (!key) return Promise.resolve(d);
+                        if (typeof key === 'string') return Promise.resolve({ [key]: d[key] });
+                        if (Array.isArray(key)) {
+                            const res = {};
+                            key.forEach(k => res[k] = d[k]);
+                            return Promise.resolve(res);
+                        }
+                        return Promise.resolve(d);
+                    }
+                };
+            },
+            args: [sk, allData]
+        });
+        // Inject the plugin script file
+        await chrome.scripting.executeScript({
+            target: { tabId },
+            world: 'MAIN',
+            files: [scriptFile]
+        });
+    } catch (e) {
+        console.error(`Plugin execution error (${scriptFile}):`, e);
+    }
+}
+
+// Get the script file path for a content script
+function csScriptPath(pluginId, index) {
+    return `plugin_scripts/${pluginId.replace(/-/g, '_')}_cs_${index}.js`;
+}
+
+// Get the script file path for a command
+function cmdScriptPath(pluginId, cmdName) {
+    return `plugin_scripts/${pluginId.replace(/-/g, '_')}_cmd_${cmdName}.js`;
+}
 
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     if (changeInfo.status === 'complete' && tab.url) {
@@ -71,41 +235,12 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
         const allStored = await chrome.storage.local.get(null);
         for (const plugin of plugins) {
             if (plugin.enabled && plugin.contentScripts) {
-                for (const cs of plugin.contentScripts) {
+                for (let i = 0; i < plugin.contentScripts.length; i++) {
+                    const cs = plugin.contentScripts[i];
                     const isMatch = cs.matches.some(m => new RegExp('^' + m.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$').test(tab.url));
                     if (isMatch) {
-                        const storageKey = `plugin_settings_${plugin.id.replace(/-/g, '_')}`;
-                        chrome.scripting.executeScript({
-                            target: { tabId },
-                            world: 'MAIN',
-                            func: (code, storageKey, allData) => {
-                                const script = document.createElement('script');
-                                const nonce = document.querySelector('script[nonce]')?.nonce || document.querySelector('script[nonce]')?.getAttribute('nonce');
-                                if (nonce) script.setAttribute('nonce', nonce);
-                                script.textContent = `(async () => {
-                                    const storageKey = "${storageKey}";
-                                    const allData = ${JSON.stringify(allData)};
-                                    if (!window.chrome) window.chrome = {};
-                                    if (!window.chrome.storage) window.chrome.storage = {};
-                                    if (!window.chrome.storage.local) window.chrome.storage.local = {
-                                        get: (key) => {
-                                            if (!key) return Promise.resolve(allData);
-                                            if (typeof key === 'string') return Promise.resolve({ [key]: allData[key] });
-                                            if (Array.isArray(key)) {
-                                                const res = {};
-                                                key.forEach(k => res[k] = allData[k]);
-                                                return Promise.resolve(res);
-                                            }
-                                            return Promise.resolve(allData);
-                                        }
-                                    };
-                                    try { ${code} } catch (e) { console.error('Plugin internal error:', e); }
-                                })();`;
-                                (document.head || document.documentElement).appendChild(script);
-                                script.remove();
-                            },
-                            args: [cs.code, storageKey, allStored]
-                        });
+                        const scriptFile = csScriptPath(plugin.id, i);
+                        executePluginCode(tabId, scriptFile, plugin.id, allStored);
                     }
                 }
             }
@@ -122,43 +257,13 @@ chrome.commands.onCommand.addListener(async (command) => {
         const [pluginId, cmdKey] = mapping.split(':');
         const plugin = plugins.find(p => p.id === pluginId);
 
-        if (plugin && plugin.enabled && plugin.commands && plugin.commands[cmdKey]) {
+        if (plugin && plugin.enabled) {
+            const scriptFile = cmdScriptPath(pluginId, cmdKey);
             const allStored = await chrome.storage.local.get(null);
-            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-                if (!tabs[0]) return;
-                const storageKey = `plugin_settings_${plugin.id.replace(/-/g, '_')}`;
-                chrome.scripting.executeScript({
-                    target: { tabId: tabs[0].id },
-                    world: 'MAIN',
-                    func: (code, storageKey, allData) => {
-                        const script = document.createElement('script');
-                        const nonce = document.querySelector('script[nonce]')?.nonce || document.querySelector('script[nonce]')?.getAttribute('nonce');
-                        if (nonce) script.setAttribute('nonce', nonce);
-                        script.textContent = `(async () => {
-                            const storageKey = "${storageKey}";
-                            const allData = ${JSON.stringify(allData)};
-                            if (!window.chrome) window.chrome = {};
-                            if (!window.chrome.storage) window.chrome.storage = {};
-                            if (!window.chrome.storage.local) window.chrome.storage.local = {
-                                get: (key) => {
-                                    if (!key) return Promise.resolve(allData);
-                                    if (typeof key === 'string') return Promise.resolve({ [key]: allData[key] });
-                                    if (Array.isArray(key)) {
-                                        const res = {};
-                                        key.forEach(k => res[k] = allData[k]);
-                                        return Promise.resolve(res);
-                                    }
-                                    return Promise.resolve(allData);
-                                }
-                            };
-                            try { ${code} } catch (e) { console.error('Command error:', e); }
-                        })();`;
-                        (document.head || document.documentElement).appendChild(script);
-                        script.remove();
-                    },
-                    args: [plugin.commands[cmdKey], storageKey, allStored]
-                });
-            });
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            if (tab) {
+                executePluginCode(tab.id, scriptFile, plugin.id, allStored);
+            }
         }
         return;
     }
@@ -173,21 +278,23 @@ chrome.commands.onCommand.addListener(async (command) => {
 
         const availableCommands = [];
         for (const plugin of (plugins || [])) {
-            if (plugin.enabled && plugin.commands) {
-                for (const [cmdName, cmdCode] of Object.entries(plugin.commands)) {
-                    availableCommands.push({
-                        pluginId: plugin.id,
-                        pluginName: plugin.name,
-                        command: cmdName,
-                        code: cmdCode
-                    });
-                }
+            if (!plugin.enabled) continue;
+            const cmdNames = plugin.commandNames || [];
+            for (const cmdName of cmdNames) {
+                availableCommands.push({
+                    pluginId: plugin.id,
+                    pluginName: plugin.name,
+                    command: cmdName,
+                    scriptFile: cmdScriptPath(plugin.id, cmdName)
+                });
             }
         }
 
+        // Command palette runs in ISOLATED world to avoid Trusted Types restrictions.
+        // All DOM is built programmatically (no innerHTML) for maximum compatibility.
         chrome.scripting.executeScript({
             target: { tabId: tab.id },
-            world: 'MAIN',
+            world: 'ISOLATED',
             func: (commands, allData, shortcuts) => {
                 // Toggle off if already open
                 const existing = document.getElementById('fje-cmd-palette-overlay');
@@ -211,7 +318,8 @@ chrome.commands.onCommand.addListener(async (command) => {
                     '.fje-cmd-item:hover,.fje-cmd-item.fje-active{background:#04395e;border-left-color:#4a9eff}',
                     '.fje-cmd-name{color:#e0e0e0;font-size:14px}',
                     '.fje-cmd-plugin{color:#888;font-size:12px;margin-left:12px;white-space:nowrap}',
-                    '.fje-cmd-empty{color:#666;font-style:italic;padding:20px;text-align:center}'
+                    '.fje-cmd-empty{color:#666;font-style:italic;padding:20px;text-align:center}',
+                    '.fje-cmd-shortcut{color:#aaa;font-size:10px;margin-right:10px;border:1px solid #454545;padding:2px 4px;border-radius:3px}'
                 ].join('\n');
                 document.head.appendChild(style);
 
@@ -245,34 +353,56 @@ chrome.commands.onCommand.addListener(async (command) => {
                     return s.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
                 }
 
+                // Build a list item entirely with DOM APIs (no innerHTML)
+                function buildItem(cmd, i) {
+                    const li = document.createElement('li');
+                    li.className = 'fje-cmd-item' + (i === activeIndex ? ' fje-active' : '');
+
+                    const nameSpan = document.createElement('span');
+                    nameSpan.className = 'fje-cmd-name';
+                    nameSpan.textContent = fmt(cmd.command);
+                    li.appendChild(nameSpan);
+
+                    const rightDiv = document.createElement('div');
+                    rightDiv.style.cssText = 'display:flex;align-items:center;';
+
+                    const mappingEntries = Object.entries(allData.shortcutMappings || {});
+                    const slotName = mappingEntries.find(([k, v]) => v === `${cmd.pluginId}:${cmd.command}`)?.[0];
+                    const actualKey = shortcuts.find(s => s.name === slotName)?.shortcut || '';
+
+                    if (actualKey) {
+                        const keySpan = document.createElement('span');
+                        keySpan.className = 'fje-cmd-shortcut';
+                        keySpan.textContent = actualKey;
+                        rightDiv.appendChild(keySpan);
+                    }
+
+                    const pluginSpan = document.createElement('span');
+                    pluginSpan.className = 'fje-cmd-plugin';
+                    pluginSpan.textContent = cmd.pluginName;
+                    rightDiv.appendChild(pluginSpan);
+
+                    li.appendChild(rightDiv);
+
+                    li.addEventListener('click', () => run(cmd));
+                    li.addEventListener('mouseenter', () => {
+                        activeIndex = i;
+                        render();
+                    });
+                    return li;
+                }
+
                 function render() {
-                    list.innerHTML = '';
+                    while (list.firstChild) list.removeChild(list.firstChild);
                     if (filtered.length === 0) {
-                        list.innerHTML = '<li class="fje-cmd-empty">No matching commands</li>';
+                        const empty = document.createElement('li');
+                        empty.className = 'fje-cmd-empty';
+                        empty.textContent = 'No matching commands';
+                        list.appendChild(empty);
                         return;
                     }
                     filtered.forEach((cmd, i) => {
-                        const li = document.createElement('li');
-                        li.className = 'fje-cmd-item' + (i === activeIndex ? ' fje-active' : '');
-                        
-                        const mappingEntries = Object.entries(allData.shortcutMappings || {});
-                        const slotName = mappingEntries.find(([k, v]) => v === `${cmd.pluginId}:${cmd.command}`)?.[0];
-                        const actualKey = shortcuts.find(s => s.name === slotName)?.shortcut || '';
-
-                        li.innerHTML = `
-                            <span class="fje-cmd-name">${fmt(cmd.command)}</span>
-                            <div style="display:flex; align-items:center;">
-                                ${actualKey ? `<span style="color:#aaa; font-size:10px; margin-right:10px; border:1px solid #454545; padding:2px 4px; border-radius:3px;">${actualKey}</span>` : ''}
-                                <span class="fje-cmd-plugin">${cmd.pluginName}</span>
-                            </div>
-                        `;
-
-                        li.addEventListener('click', () => run(cmd));
-                        li.addEventListener('mouseenter', () => {
-                            activeIndex = i;
-                            render();
-                        });
-                        list.appendChild(li);
+                        list.appendChild(buildItem(cmd, i));
                     });
                     const active = list.querySelector('.fje-active');
                     if (active) active.scrollIntoView({ block: 'nearest' });
@@ -285,27 +415,13 @@ chrome.commands.onCommand.addListener(async (command) => {
 
                 function run(cmd) {
                     cleanup();
-                    const sk = 'plugin_settings_' + cmd.pluginId.replace(/-/g, '_');
-                    const script = document.createElement('script');
-                    const nonce = document.querySelector('script[nonce]')?.nonce || document.querySelector('script[nonce]')?.getAttribute('nonce');
-                    if (nonce) script.setAttribute('nonce', nonce);
-                    script.textContent = '(async()=>{'
-                        + 'const storageKey="' + sk + '";'
-                        + 'const allData=' + JSON.stringify(allData) + ';'
-                        + 'if(!window.chrome)window.chrome={};'
-                        + 'if(!window.chrome.storage)window.chrome.storage={};'
-                        + 'if(!window.chrome.storage.local)window.chrome.storage.local={'
-                        + 'get:(key)=>{'
-                        + 'if(!key)return Promise.resolve(allData);'
-                        + 'if(typeof key==="string")return Promise.resolve({[key]:allData[key]});'
-                        + 'if(Array.isArray(key)){const r={};key.forEach(k=>r[k]=allData[k]);return Promise.resolve(r);}'
-                        + 'return Promise.resolve(allData);'
-                        + '}'
-                        + '};'
-                        + 'try{' + cmd.code + '}catch(e){console.error("Palette command error:",e);}'
-                        + '})();';
-                    (document.head || document.documentElement).appendChild(script);
-                    script.remove();
+                    // Send message back to background to execute via executePluginCode
+                    chrome.runtime.sendMessage({
+                        action: 'execute-palette-command',
+                        pluginId: cmd.pluginId,
+                        command: cmd.command,
+                        scriptFile: cmd.scriptFile
+                    });
                 }
 
                 // --- Events ---
@@ -354,44 +470,36 @@ chrome.commands.onCommand.addListener(async (command) => {
     if (!plugins) return;
     const allStored = await chrome.storage.local.get(null);
     for (const plugin of plugins) {
-        if (plugin.enabled && plugin.commands && plugin.commands[command]) {
-            chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
-                if (!tabs[0]) return;
-                const tabId = tabs[0].id;
-                const storageKey = `plugin_settings_${plugin.id.replace(/-/g, '_')}`;
-                chrome.scripting.executeScript({
-                    target: { tabId },
-                    world: 'MAIN',
-                    func: (code, storageKey, allData) => {
-                        const script = document.createElement('script');
-                        const nonce = document.querySelector('script[nonce]')?.nonce || document.querySelector('script[nonce]')?.getAttribute('nonce');
-                        if (nonce) script.setAttribute('nonce', nonce);
-                        script.textContent = `(async () => {
-                            const storageKey = "${storageKey}";
-                            const allData = ${JSON.stringify(allData)};
-                            if (!window.chrome) window.chrome = {};
-                            if (!window.chrome.storage) window.chrome.storage = {};
-                            if (!window.chrome.storage.local) window.chrome.storage.local = {
-                                get: (key) => {
-                                    if (!key) return Promise.resolve(allData);
-                                    if (typeof key === 'string') return Promise.resolve({ [key]: allData[key] });
-                                    if (Array.isArray(key)) {
-                                        const res = {};
-                                        key.forEach(k => res[k] = allData[k]);
-                                        return Promise.resolve(res);
-                                    }
-                                    return Promise.resolve(allData);
-                                }
-                            };
-                            try { ${code} } catch (e) { console.error('Command internal error:', e); }
-                        })();`;
-                        (document.head || document.documentElement).appendChild(script);
-                        script.remove();
-                    },
-                    args: [plugin.commands[command], storageKey, allStored]
-                });
-            });
+        if (!plugin.enabled) continue;
+        const hasCommand = plugin.commandNames && plugin.commandNames.includes(command);
+        if (hasCommand) {
+            const scriptFile = cmdScriptPath(plugin.id, command);
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            if (tab) {
+                executePluginCode(tab.id, scriptFile, plugin.id, allStored);
+            }
         }
+    }
+});
+
+// --- Palette command execution (from ISOLATED world back to background) ---
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action === 'execute-palette-command') {
+        (async () => {
+            const allStored = await chrome.storage.local.get(null);
+            executePluginCode(sender.tab.id, message.scriptFile, message.pluginId, allStored);
+        })();
+        return false;
+    }
+});
+
+// --- Plugin script file sync (writes .js files to plugin_scripts/) ---
+// The manager page writes files via File System Access API and notifies background
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action === 'sync-plugin-scripts') {
+        // Nothing to do in background — files are written directly by manager
+        sendResponse({ success: true });
+        return false;
     }
 });
 

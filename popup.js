@@ -43,7 +43,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 if (field.type === 'toggle') {
                     container.innerHTML = `&emsp;&emsp;<input type="checkbox" id="${item.id}_${field.id}"><span class="toggle-slider"></span><span class="toggle-label">${field.label}</span>`;
                     input = container.querySelector('input');
-                    input.checked = pluginSettings[field.id] !== undefined ? pluginSettings[field.id] : (item.config[field.id]);
+                    input.checked = pluginSettings[field.id] !== undefined ? pluginSettings[field.id] : !!field.default;
                 } else if (field.type === 'select') {
                     input = document.createElement('select');
                     input.id = `${item.id}_${field.id}`;
@@ -53,13 +53,13 @@ document.addEventListener("DOMContentLoaded", async () => {
                         o.textContent = opt.label;
                         input.appendChild(o);
                     });
-                    input.value = pluginSettings[field.id] || item.config[field.id];
+                    input.value = pluginSettings[field.id] !== undefined ? pluginSettings[field.id] : (field.default || '');
                     input.style.marginLeft = '55px';
                 } else if (field.type === 'text') {
                     input = document.createElement('input');
                     input.type = 'text';
                     input.id = `${item.id}_${field.id}`;
-                    input.value = pluginSettings[field.id] !== undefined ? pluginSettings[field.id] : (item.config[field.id] || '');
+                    input.value = pluginSettings[field.id] !== undefined ? pluginSettings[field.id] : (field.default || '');
                     input.style.marginLeft = '25px';
                     input.style.width = 'calc(100% - 60px)';
                 } else if (field.type === 'number') {
@@ -69,7 +69,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     if (field.min !== undefined) input.min = field.min;
                     if (field.max !== undefined) input.max = field.max;
                     if (field.step !== undefined) input.step = field.step; // Support floats like 0.1
-                    input.value = pluginSettings[field.id] !== undefined ? pluginSettings[field.id] : (item.config[field.id]);
+                    input.value = pluginSettings[field.id] !== undefined ? pluginSettings[field.id] : (field.default !== undefined ? field.default : '');
                     input.style.marginLeft = '60px';
                     input.style.width = '50px';
                 }

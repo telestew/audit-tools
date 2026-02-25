@@ -27,7 +27,7 @@
     "host_permissions": ["<all_urls>"],
     "web_accessible_resources": [
         {
-            "resources": ["default_plugins/*.json"],
+            "resources": ["default_plugins/*.json", "plugin_scripts/*.js"],
             "matches": ["<all_urls>"]
         }
     ],
