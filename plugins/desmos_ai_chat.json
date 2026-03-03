@@ -2,29 +2,25 @@
   "id": "desmos-ai-chat",
   "name": "Desmos AI Chat",
   "type": "plugin",
-  "enabled": true,
-  "config": {
-    "apiEndpoint": "http://localhost:8000",
-    "modelName": "openai/claude-opus-4-6"
-  },
   "configSchema": [
     {
       "id": "apiEndpoint",
       "label": "API Endpoint (base URL)",
-      "type": "text"
+      "type": "text",
+      "default": "http://localhost:8000"
     },
     {
       "id": "modelName",
       "label": "Model Name",
-      "type": "text"
+      "type": "text",
+      "default": "openai/claude-opus-4-6"
     }
   ],
   "contentScripts": [
     {
       "matches": [
         "https://www.desmos.com/calculator*"
-      ],
-      "code": ""
+      ]
     }
   ]
 }

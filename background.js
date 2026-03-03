@@ -5,6 +5,15 @@ chrome.runtime.onInstalled.addListener(async () => {
     }
 });
 
+function isInjectablePageUrl(url) {
+    try {
+        const parsed = new URL(url);
+        return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+    } catch (_) {
+        return false;
+    }
+}
+
 // --- Helpers for separated code storage ---
 function codeKeyCS(pluginId, index) {
     return `plugin_code_${pluginId.replace(/-/g, '_')}_cs_${index}`;
@@ -14,6 +23,11 @@ function codeKeyCMD(pluginId, cmdName) {
 }
 function settingsKey(pluginId) {
     return `plugin_settings_${pluginId.replace(/-/g, '_')}`;
+}
+function isPluginEnabled(plugin, enabledStates) {
+    if (!plugin || plugin.type !== 'plugin') return false;
+    if (!enabledStates) return true;
+    return enabledStates[plugin.id] !== false;
 }
 
 // Resolve a plugin setting value: stored value > schema default > undefined
@@ -86,7 +100,7 @@ async function removePluginCode(plugin) {
 // Strip code from plugin metadata (for storing in plugins array)
 function stripCodeFromPlugin(plugin) {
     const clean = { ...plugin };
-    // Remove legacy config object — only configSchema matters
+    // Remove config object — only configSchema matters
     delete clean.config;
     if (clean.contentScripts) {
         clean.contentScripts = clean.contentScripts.map(cs => {
@@ -102,9 +116,60 @@ function stripCodeFromPlugin(plugin) {
     return clean;
 }
 
+function unwrapGeneratedPluginScript(code) {
+    const prefix = `// Auto-generated plugin script`;
+    if (!code.startsWith(prefix)) return code;
+    const startMarker = '\n    try {\n';
+    const endMarker = "\n    } catch (e) { console.error('Plugin error:', e); }\n})();";
+    const start = code.indexOf(startMarker);
+    const end = code.lastIndexOf(endMarker);
+    if (start === -1 || end === -1 || end < start) return code;
+    return code.slice(start + startMarker.length, end).replace(/\s+$/, '');
+}
+
+async function loadPackagedScript(path) {
+    try {
+        const response = await fetch(chrome.runtime.getURL(path));
+        if (!response.ok) return null;
+        const text = await response.text();
+        return unwrapGeneratedPluginScript(text);
+    } catch (_) {
+        return null;
+    }
+}
+
+async function savePackagedPluginCode(plugin) {
+    const pluginIdSafe = plugin.id.replace(/-/g, '_');
+    const toStore = {};
+
+    if (plugin.contentScripts) {
+        for (let i = 0; i < plugin.contentScripts.length; i++) {
+            const key = codeKeyCS(plugin.id, i);
+            const existing = await chrome.storage.local.get(key);
+            if (existing[key] !== undefined && existing[key] !== '') continue;
+            const packaged = await loadPackagedScript(`plugin_scripts/${pluginIdSafe}_cs_${i}.js`);
+            if (packaged !== null) toStore[key] = packaged;
+        }
+    }
+
+    const cmdNames = plugin.commandNames || [];
+    for (const cmdName of cmdNames) {
+        const key = codeKeyCMD(plugin.id, cmdName);
+        const existing = await chrome.storage.local.get(key);
+        if (existing[key] !== undefined && existing[key] !== '') continue;
+        const packaged = await loadPackagedScript(`plugin_scripts/${pluginIdSafe}_cmd_${cmdName}.js`);
+        if (packaged !== null) toStore[key] = packaged;
+    }
+
+    if (Object.keys(toStore).length > 0) {
+        await chrome.storage.local.set(toStore);
+    }
+}
+
 // Save plugin with separated code storage — call this for new/imported plugins
 async function savePluginFull(plugin) {
     await savePluginCode(plugin);
+    await savePackagedPluginCode(plugin);
     // Set initial settings from schema defaults if not already stored
     if (plugin.configSchema) {
         const sk = settingsKey(plugin.id);
@@ -126,6 +191,7 @@ async function restoreDefaultPlugins() {
     ];
 
     const plugins = [];
+    const pluginEnabledStates = {};
     for (const file of defaultFiles) {
         try {
             const response = await fetch(chrome.runtime.getURL(`default_plugins/${file}`));
@@ -133,7 +199,11 @@ async function restoreDefaultPlugins() {
             // Save code blobs separately and initial settings
             await savePluginFull(data);
             // Store stripped metadata
-            plugins.push(stripCodeFromPlugin(data));
+            const stripped = stripCodeFromPlugin(data);
+            if (stripped.type === 'plugin') {
+                pluginEnabledStates[stripped.id] = true;
+            }
+            plugins.push(stripped);
         } catch (e) {
             console.error(`Failed to load default plugin: ${file}`, e);
         }
@@ -143,7 +213,7 @@ async function restoreDefaultPlugins() {
     const { shortcutMappings = {} } = await chrome.storage.local.get('shortcutMappings');
     shortcutMappings['kb_command_1'] = 'lookup-task-default:lookup_task';
 
-    await chrome.storage.local.set({ plugins, shortcutMappings });
+    await chrome.storage.local.set({ plugins, shortcutMappings, pluginEnabledStates });
 }
 
 
@@ -155,6 +225,10 @@ async function executePluginCode(tabId, scriptFile, pluginId, allData) {
     // First inject the storage shim with current data, then inject the plugin script
     // Pre-resolve this plugin's settings from allData
     const pluginConfig = allData[sk] || {};
+    const limitedData = { [sk]: pluginConfig };
+    if (allData.csrfToken !== undefined) {
+        limitedData.csrfToken = allData.csrfToken;
+    }
 
     try {
         // Inject storage shim + bridge helper + resolved settings into MAIN world
@@ -165,24 +239,55 @@ async function executePluginCode(tabId, scriptFile, pluginId, allData) {
                 window.__pluginStorageKey = storageKey;
                 window.__pluginAllData = allData;
                 // Pre-resolved settings for the current plugin — plugin code uses this directly
-                window.__pluginSettings = pluginSettings;
+                window.__pluginSettings = pluginSettings || {};
+                window.__pluginAllData[storageKey] = window.__pluginSettings;
                 if (!window.chrome) window.chrome = {};
                 if (!window.chrome.storage) window.chrome.storage = {};
                 if (!window.chrome.storage.local) window.chrome.storage.local = {
                     get: (key) => {
                         const d = window.__pluginAllData;
-                        if (!key) return Promise.resolve(d);
-                        if (typeof key === 'string') return Promise.resolve({ [key]: d[key] });
+                        const currentSettings = () => d[storageKey] || window.__pluginSettings || {};
+                        if (!key) return Promise.resolve({ ...d, pluginSettings: currentSettings() });
+                        if (typeof key === 'string') {
+                            if (key === 'pluginSettings') return Promise.resolve({ pluginSettings: currentSettings() });
+                            if (key === storageKey) return Promise.resolve({ [storageKey]: currentSettings() });
+                            return Promise.resolve({ [key]: d[key] });
+                        }
                         if (Array.isArray(key)) {
                             const res = {};
-                            key.forEach(k => res[k] = d[k]);
+                            key.forEach(k => {
+                                if (k === 'pluginSettings') res.pluginSettings = currentSettings();
+                                else if (k === storageKey) res[storageKey] = currentSettings();
+                                else res[k] = d[k];
+                            });
                             return Promise.resolve(res);
                         }
-                        return Promise.resolve(d);
+                        if (typeof key === 'object') {
+                            const res = { ...key };
+                            Object.keys(key).forEach(k => {
+                                if (k === 'pluginSettings') res.pluginSettings = currentSettings();
+                                else if (k === storageKey) res[storageKey] = currentSettings();
+                                else if (d[k] !== undefined) res[k] = d[k];
+                            });
+                            return Promise.resolve(res);
+                        }
+                        return Promise.resolve({ ...d, pluginSettings: currentSettings() });
                     },
                     set: (data) => {
+                        const payload = { ...(data || {}) };
+                        if (Object.prototype.hasOwnProperty.call(payload, 'pluginSettings')) {
+                            const merged = { ...(window.__pluginAllData[storageKey] || {}), ...(payload.pluginSettings || {}) };
+                            window.__pluginSettings = merged;
+                            window.__pluginAllData[storageKey] = merged;
+                            delete payload.pluginSettings;
+                            payload[storageKey] = merged;
+                        }
+                        Object.entries(payload).forEach(([k, v]) => {
+                            window.__pluginAllData[k] = v;
+                        });
+                        if (Object.keys(payload).length === 0) return Promise.resolve({ ok: true });
                         // Write-back via bridge
-                        return window.__pluginBridge('storage.set', { data });
+                        return window.__pluginBridge('storage.set', { data: payload });
                     }
                 };
 
@@ -218,7 +323,7 @@ async function executePluginCode(tabId, scriptFile, pluginId, allData) {
                     });
                 };
             },
-            args: [sk, allData, pluginConfig]
+            args: [sk, limitedData, pluginConfig]
         });
         // Inject the plugin script file
         await chrome.scripting.executeScript({
@@ -246,7 +351,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
         // Inject generic ISOLATED world bridge on all http(s) pages.
         // This relays postMessage from MAIN world plugin code to chrome.runtime,
         // giving plugins access to privileged APIs (fetch, cookies, notifications, etc.)
-        if (/^https?:\/\//.test(tab.url)) {
+        if (isInjectablePageUrl(tab.url)) {
             chrome.scripting.executeScript({
                 target: { tabId },
                 world: 'ISOLATED',
@@ -274,11 +379,11 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
             });
         }
 
-        const { plugins } = await chrome.storage.local.get('plugins');
+        const { plugins, pluginEnabledStates = {} } = await chrome.storage.local.get(['plugins', 'pluginEnabledStates']);
         if (!plugins) return;
         const allStored = await chrome.storage.local.get(null);
         for (const plugin of plugins) {
-            if (plugin.enabled && plugin.contentScripts) {
+            if (isPluginEnabled(plugin, pluginEnabledStates) && plugin.contentScripts) {
                 for (let i = 0; i < plugin.contentScripts.length; i++) {
                     const cs = plugin.contentScripts[i];
                     const isMatch = cs.matches.some(m => new RegExp('^' + m.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$').test(tab.url));
@@ -294,14 +399,14 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 
 chrome.commands.onCommand.addListener(async (command) => {
     if (command.startsWith('kb_command_')) {
-        const { shortcutMappings = {}, plugins = [] } = await chrome.storage.local.get(['shortcutMappings', 'plugins']);
+        const { shortcutMappings = {}, plugins = [], pluginEnabledStates = {} } = await chrome.storage.local.get(['shortcutMappings', 'plugins', 'pluginEnabledStates']);
         const mapping = shortcutMappings[command];
         if (!mapping) return;
 
         const [pluginId, cmdKey] = mapping.split(':');
         const plugin = plugins.find(p => p.id === pluginId);
 
-        if (plugin && plugin.enabled) {
+        if (plugin && isPluginEnabled(plugin, pluginEnabledStates)) {
             const scriptFile = cmdScriptPath(pluginId, cmdKey);
             const allStored = await chrome.storage.local.get(null);
             const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -314,7 +419,7 @@ chrome.commands.onCommand.addListener(async (command) => {
 
     // ─── Command Palette ───
     if (command === 'open_command_palette') {
-        const { plugins } = await chrome.storage.local.get('plugins');
+        const { plugins, pluginEnabledStates = {} } = await chrome.storage.local.get(['plugins', 'pluginEnabledStates']);
         const allStored = await chrome.storage.local.get(null);
         const chromeCommands = await chrome.commands.getAll();
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -322,7 +427,7 @@ chrome.commands.onCommand.addListener(async (command) => {
 
         const availableCommands = [];
         for (const plugin of (plugins || [])) {
-            if (!plugin.enabled) continue;
+            if (!isPluginEnabled(plugin, pluginEnabledStates)) continue;
             const cmdNames = plugin.commandNames || [];
             for (const cmdName of cmdNames) {
                 availableCommands.push({
@@ -510,11 +615,11 @@ chrome.commands.onCommand.addListener(async (command) => {
     }
 
     // ─── Direct command dispatch (for any manifest-registered plugin commands) ───
-    const { plugins } = await chrome.storage.local.get('plugins');
+    const { plugins, pluginEnabledStates = {} } = await chrome.storage.local.get(['plugins', 'pluginEnabledStates']);
     if (!plugins) return;
     const allStored = await chrome.storage.local.get(null);
     for (const plugin of plugins) {
-        if (!plugin.enabled) continue;
+        if (!isPluginEnabled(plugin, pluginEnabledStates)) continue;
         const hasCommand = plugin.commandNames && plugin.commandNames.includes(command);
         if (hasCommand) {
             const scriptFile = cmdScriptPath(plugin.id, command);
@@ -530,6 +635,11 @@ chrome.commands.onCommand.addListener(async (command) => {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === 'execute-palette-command') {
         (async () => {
+            const { plugins = [], pluginEnabledStates = {} } = await chrome.storage.local.get(['plugins', 'pluginEnabledStates']);
+            const plugin = plugins.find(p => p.id === message.pluginId && isPluginEnabled(p, pluginEnabledStates));
+            const hasCommand = plugin && plugin.commandNames && plugin.commandNames.includes(message.command);
+            const expectedFile = hasCommand ? cmdScriptPath(plugin.id, message.command) : null;
+            if (!hasCommand || message.scriptFile !== expectedFile || !sender.tab?.id) return;
             const allStored = await chrome.storage.local.get(null);
             executePluginCode(sender.tab.id, message.scriptFile, message.pluginId, allStored);
         })();
@@ -610,7 +720,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 }
                 case 'storage.get': {
                     const result = await chrome.storage.local.get(args.keys || null);
-                    
+                    sendResponse({ result });
                     break;
                 }
 
@@ -699,4 +809,3 @@ chrome.cookies.onChanged.addListener((changeInfo) => {
     if (changeInfo.cookie.name === '_csrf' && changeInfo.cookie.domain.includes('outlier.ai')) updateCsrfToken();
 });
 updateCsrfToken();
-

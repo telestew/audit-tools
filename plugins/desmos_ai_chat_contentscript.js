@@ -5,14 +5,14 @@ if (document.getElementById('desmos-ai-chat-toggle')) throw new Error('already l
 
 const PLUGIN_ID = 'desmos-ai-chat';
 const LS_KEY = 'desmos_ai_conversations';
-const settingsKey = 'plugin_settings_desmos_ai_chat';
 
-let _cfg = {};
-try {
-  const r = await chrome.storage.local.get(settingsKey);
-  _cfg = r[settingsKey] || {};
-} catch (e) {}
-console.log(_cfg);
+let _cfg = (typeof pluginSettings !== 'undefined' && pluginSettings) ? pluginSettings : {};
+if (!Object.keys(_cfg).length) {
+  try {
+    const r = await chrome.storage.local.get('pluginSettings');
+    _cfg = r.pluginSettings || {};
+  } catch (e) {}
+}
 const API_BASE = (_cfg.apiEndpoint || 'http://localhost:8000').replace(/\/+$/, '');
 const MODEL = _cfg.modelName;
 

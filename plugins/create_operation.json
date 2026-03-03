@@ -1,18 +1,16 @@
 {
-  "commands": {
-    "create_operation_from_clipboard": "const { plugin_settings_create_operation: config } =\n  await chrome.storage.local.get(\"plugin_settings_create_operation\");\nif (config?.enabled === false) return;\nconst { csrfToken } = await chrome.storage.local.get(\"csrfToken\");\nconst clipboardText = await navigator.clipboard.readText();\nconst relatedIds = clipboardText.split(\"\\n\").filter((id) => id.trim() !== \"\");\nif (!relatedIds.every((id) => id.match(/^[A-Za-z0-9]{24}$/))) {\n  alert(\"Clipboard is not a clean list of IDs.\");\n  return;\n}\nconst userID = localStorage.getItem(\"ajs_user_id\").slice(1, 25);\nconst traits = JSON.parse(localStorage.getItem(\"ajs_user_traits\"));\nconst activeWorkerTeam = traits[\"activeWorkerTeam\"];\nconst name = prompt(\"Enter operation name:\", traits[\"firstName\"]);\nif (!name) return;\nconst dueDate = new Date();\ndueDate.setDate(dueDate.getDate() + 1);\nconst body = {\n  operation: {\n    type: \"speed_audit\",\n    name,\n    priority: 3,\n    maxTimeRequired: relatedIds.length * 1200,\n    dueDate: dueDate.toISOString(),\n    project: \"\",\n    params: { auditBatchView: \"chat_bulk_audit\", instructions: \"\" },\n    context: {\n      assignmentParams: { userIds: [], workerTeamIds: [activeWorkerTeam] },\n      reviewAssignmentParams: { userIds: [userID], workerTeamIds: [] },\n    },\n  },\n  relatedIds,\n};\nconst resp = await fetch(\n  \"https://app.outlier.ai/corp-api/qm/operations/batch\",\n  {\n    method: \"POST\",\n    headers: { \"X-CSRF-Token\": csrfToken, \"Content-Type\": \"application/json\" },\n    body: JSON.stringify(body),\n  },\n);\nif (resp.ok) {\n  const { operationIds } = await resp.json();\n  if (confirm(\"Success! Claim now?\")) {\n    const claimResp = await fetch(\n      `https://app.outlier.ai/corp-api/qm/operations/${operationIds[0]}/transition`,\n      {\n        method: \"POST\",\n        headers: {\n          \"X-CSRF-Token\": csrfToken,\n          \"Content-Type\": \"application/json\",\n        },\n        body: JSON.stringify({\n          event: { type: \"claimAttempt\", userId: userID },\n        }),\n      },\n    );\n    const claimData = await claimResp.json();\n    window.open(\n      `https://app.outlier.ai/en/expert/outlieradmin/tools/chat_bulk_audit/${claimData.nodes[0].qaOperation.relatedObjectId}?closeOnComplete=1&qaOperationId=${claimData.operation._id}`,\n      \"_blank\",\n    );\n  }\n}\n"
-  },
-  "config": {
-    "enabled": true
-  },
   "configSchema": [
     {
       "id": "enabled",
       "label": "Create ops with <Alt+O>",
-      "type": "toggle"
+      "type": "toggle",
+      "default": true
     }
   ],
-  "enabled": true,
+  "commandNames": [
+    "create_operation_from_clipboard"
+  ],
   "id": "create-operation",
-  "name": "Create Operation"
+  "name": "Create Operation",
+  "type": "plugin"
 }

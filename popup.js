@@ -5,8 +5,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     const { theme = 'auto' } = await chrome.storage.local.get('theme');
     applyTheme(theme);
 
-    const { plugins } = await chrome.storage.local.get('plugins');
+    const { plugins, pluginEnabledStates = {} } = await chrome.storage.local.get(['plugins', 'pluginEnabledStates']);
     if (!plugins) return;
+    const isPluginEnabled = (item) => {
+        return pluginEnabledStates[item.id] !== false;
+    };
 
     const settingsContainer = document.querySelector('.settings');
     settingsContainer.innerHTML = '';
@@ -21,7 +24,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             groupHeader.textContent = item.name;
             currentGroupElement.appendChild(groupHeader);
             settingsContainer.appendChild(currentGroupElement);
-        } else if (item.type === 'plugin' && item.enabled && item.configSchema) {
+        } else if (item.type === 'plugin' && isPluginEnabled(item) && item.configSchema) {
             const targetContainer = currentGroupElement || settingsContainer;
 
             const storageKey = `plugin_settings_${item.id.replace(/-/g, '_')}`;
@@ -81,9 +84,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     document.getElementById("save").addEventListener("click", async () => {
-        const { plugins } = await chrome.storage.local.get('plugins');
+        const { plugins, pluginEnabledStates = {} } = await chrome.storage.local.get(['plugins', 'pluginEnabledStates']);
         for (const item of plugins) {
-            if (item.type === 'plugin' && item.enabled && item.configSchema) {
+            const enabled = pluginEnabledStates[item.id] !== false;
+            if (item.type === 'plugin' && enabled && item.configSchema) {
                 const newSettings = {};
                 item.configSchema.forEach(field => {
                     const el = document.getElementById(`${item.id}_${field.id}`);

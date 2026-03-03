@@ -8,22 +8,14 @@
     const config = pluginSettings;
     
     if (config?.enabled !== false) {
-      function hide() {
-        const xpath =
-          "//p[text()='Task Feedback for Contributor (External)']/parent::*/parent::div";
-        const result = document.evaluate(
-          xpath,
-          document,
-          null,
-          XPathResult.FIRST_ORDERED_NODE_TYPE,
-          null,
-        );
-        const div = result.singleNodeValue;
-        if (div) div.style.display = 'none';
+      function makeSelectable() {
+        document.querySelectorAll('.select-none').forEach((el) => {
+          el.style.userSelect = 'text';
+        });
       }
     
-      hide();
-      new MutationObserver(hide).observe(document.body, {
+      makeSelectable();
+      new MutationObserver(makeSelectable).observe(document.body, {
         childList: true,
         subtree: true,
       });

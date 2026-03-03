@@ -1,16 +1,10 @@
 {
-  "commands": {
-    "fuzzy_json_search": "const { plugin_settings_fuzzy_json_search: config, csrfToken: storedCsrf } = await chrome.storage.local.get(['plugin_settings_fuzzy_json_search', 'csrfToken']);\n\nconst idSource = config?.idSource || 'clipboard';\nconst FUSE_THRESHOLD = parseFloat(config?.fuseThreshold) || 0.4;\nconst RESULTS_LIMIT = parseInt(config?.resultsLimit) || 50;\nconst MAX_ENTRIES = 100000;\nconst MAX_RENDER_DEPTH = 20;\nconst MAX_ARRAY_RENDER = 200;\nconst MAX_OBJ_KEYS = 200;\nconst MAX_STRING_INDEX = 1000;\nconst DEBOUNCE_MS = 180;\n\n// --- Get the task ID ---\nlet taskId = '';\nif (idSource === 'clipboard') {\n  try { taskId = (await navigator.clipboard.readText()).trim(); } catch (e) { /* fall through */ }\n} else if (idSource === 'highlighted') {\n  taskId = window.getSelection().toString().trim();\n} else {\n  taskId = (prompt('Enter Task ID (24-char alphanumeric):') || '').trim();\n}\n\nif (!taskId || !/^[A-Za-z0-9]{24}$/.test(taskId)) {\n  alert('Invalid or missing Task ID: \"' + taskId + '\"\\nExpected 24 alphanumeric characters.');\n  throw new Error('Bad task ID');\n}\n\n// --- Get CSRF token ---\nlet csrfToken = storedCsrf || '';\nif (!csrfToken) {\n  try {\n    const row = document.cookie.split('; ').find(r => r.startsWith('_csrf='));\n    if (row) csrfToken = decodeURIComponent(row.split('=')[1]);\n  } catch (e) { /* noop */ }\n}\nif (!csrfToken) {\n  alert('No CSRF token available. Make sure you are logged in to app.outlier.ai.');\n  throw new Error('No CSRF token');\n}\n\n// --- Fetch the task data ---\nconst lookupUrl = 'https://app.outlier.ai/en/expert/outlieradmin/tools/lookup/' + taskId;\nlet pageProps = null;\ntry {\n  const res = await fetch(lookupUrl, { headers: { 'X-CSRF-Token': csrfToken }, credentials: 'include' });\n  if (!res.ok) throw new Error('HTTP ' + res.status);\n  const html = await res.text();\n  const doc = new DOMParser().parseFromString(html, 'text/html');\n  const ndScript = doc.querySelector('script#__NEXT_DATA__');\n  if (!ndScript) throw new Error('__NEXT_DATA__ not found in response');\n  const data = JSON.parse(ndScript.textContent);\n  pageProps = data.props.pageProps;\n} catch (err) {\n  alert('Failed to fetch task data:\\n' + err.message);\n  throw err;\n}\n\nif (!pageProps || typeof pageProps !== 'object') {\n  alert('No pageProps found in response.');\n  throw new Error('Empty pageProps');\n}\n\n// --- Open popup window ---\nconst popup = window.open('', 'FJE_' + taskId, 'width=900,height=750,scrollbars=yes,resizable=yes');\nif (!popup) {\n  alert('Popup blocked! Please allow popups for this site.');\n  throw new Error('Popup blocked');\n}\n\nconst popDoc = popup.document;\npopDoc.open();\npopDoc.write('<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>JSON Search: ' + taskId + '</title></head><body><div id=\"fuzzy-json-explorer\"><input type=\"text\" id=\"fje-search\" placeholder=\"Search keys and values...\" autocomplete=\"off\" spellcheck=\"false\" /><div id=\"fje-status\"></div><div id=\"fje-results\"></div></div></body></html>');\npopDoc.close();\n\n// --- Inject styles ---\nconst styleEl = popDoc.createElement('style');\nstyleEl.textContent = [\n  'html,body{margin:0;padding:0;background:#1a1a1a;color:#d4d4d4}',\n  '*{box-sizing:border-box}',\n  '#fuzzy-json-explorer{font-family:\"Cascadia Code\",\"Fira Code\",Consolas,monospace;max-width:100%;padding:16px}',\n  '#fje-search{width:100%;padding:12px 16px;font-size:16px;border:2px solid #444;border-radius:8px;box-sizing:border-box;font-family:inherit;outline:none;transition:border-color .2s;background:#2d2d2d;color:#e0e0e0}',\n  '#fje-search:focus{border-color:#4a9eff}',\n  '#fje-search::placeholder{color:#777}',\n  '#fje-status{margin-top:8px;font-size:13px;color:#888}',\n  '#fje-results{margin-top:12px}',\n  '.fje-hint{color:#666;font-style:italic;padding:20px;text-align:center}',\n  '.fje-result-card{border:1px solid #333;border-radius:8px;margin-bottom:10px;overflow:hidden;background:#252525}',\n  '.fje-path{padding:8px 12px;background:#2d2d2d;color:#e0e0e0;font-size:13px;font-weight:600;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px;border-bottom:1px solid #333}',\n  '.fje-score{color:#666;font-weight:400;font-size:11px}',\n  '.fje-match-field{color:#ffd700;font-size:11px;margin-left:8px}',\n  '.fje-tree{padding:10px 14px;overflow-x:auto;background:#1e1e1e;color:#d4d4d4;font-size:13px;line-height:1.5;max-height:600px;overflow-y:auto}',\n  '.fje-tree pre{margin:0;white-space:pre-wrap;word-break:break-word}',\n  '.fje-key{color:#9cdcfe}',\n  '.fje-string{color:#ce9178}',\n  '.fje-number{color:#b5cea8}',\n  '.fje-boolean{color:#569cd6}',\n  '.fje-null{color:#808080;font-style:italic}',\n  '.fje-bracket{color:#d4d4d4}',\n  '.fje-ellipsis{color:#808080;font-style:italic}'\n].join('\\n');\npopDoc.head.appendChild(styleEl);\n\n// --- Load Fuse.js into the popup ---\nawait new Promise((resolve, reject) => {\n  const s = popDoc.createElement('script');\n  s.src = 'https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js';\n  s.onload = resolve;\n  s.onerror = () => reject(new Error('Failed to load Fuse.js'));\n  popDoc.head.appendChild(s);\n});\n\nconst Fuse = popup.Fuse;\nif (!Fuse) {\n  popDoc.body.innerHTML = '<h2 style=\"color:red;padding:20px\">Failed to load Fuse.js</h2>';\n  throw new Error('Fuse not available');\n}\n\n// --- Flatten + Index ---\nfunction esc(str) {\n  return str.replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>').replace(/\"/g, '"');\n}\n\nfunction flattenJSON(root) {\n  const entries = [];\n  function walk(val, path, key) {\n    if (entries.length >= MAX_ENTRIES) return;\n    let vStr = '';\n    if (typeof val === 'string') vStr = val.substring(0, MAX_STRING_INDEX);\n    else if (val === null) vStr = 'null';\n    else if (typeof val !== 'object') vStr = String(val);\n    entries.push({ path, key, value: vStr, subtree: val });\n    if (val && typeof val === 'object') {\n      const keys = Object.keys(val);\n      const isArr = Array.isArray(val);\n      for (let i = 0; i < keys.length; i++) {\n        const k = keys[i];\n        const np = isArr ? path + '[' + k + ']' : (path ? path + '.' + k : k);\n        walk(val[k], np, k);\n      }\n    }\n  }\n  if (root && typeof root === 'object') {\n    const rk = Object.keys(root);\n    const ra = Array.isArray(root);\n    for (let i = 0; i < rk.length; i++) {\n      const k = rk[i];\n      const p = ra ? '[' + k + ']' : k;\n      walk(root[k], p, k);\n    }\n  }\n  return entries;\n}\n\nfunction rpt(s, n) { let o = ''; for (let i = 0; i < n; i++) o += s; return o; }\n\nfunction renderTree(val, depth) {\n  if (depth > MAX_RENDER_DEPTH) return '<span class=\"fje-ellipsis\">... (max depth)</span>';\n  const pad = rpt('  ', depth);\n  const pad1 = rpt('  ', depth + 1);\n  if (val === null) return '<span class=\"fje-null\">null</span>';\n  if (val === undefined) return '<span class=\"fje-null\">undefined</span>';\n  const type = typeof val;\n  if (type === 'string') return '<span class=\"fje-string\">"' + esc(val) + '"</span>';\n  if (type === 'number') return '<span class=\"fje-number\">' + val + '</span>';\n  if (type === 'boolean') return '<span class=\"fje-boolean\">' + val + '</span>';\n  if (Array.isArray(val)) {\n    if (val.length === 0) return '<span class=\"fje-bracket\">[]</span>';\n    const lim = Math.min(val.length, MAX_ARRAY_RENDER);\n    let h = '<span class=\"fje-bracket\">[</span>\\n';\n    for (let i = 0; i < lim; i++) {\n      h += pad1 + renderTree(val[i], depth + 1);\n      if (i < val.length - 1) h += ',';\n      h += '\\n';\n    }\n    if (val.length > MAX_ARRAY_RENDER)\n      h += pad1 + '<span class=\"fje-ellipsis\">... ' + (val.length - MAX_ARRAY_RENDER) + ' more items</span>\\n';\n    h += pad + '<span class=\"fje-bracket\">]</span>';\n    return h;\n  }\n  if (type === 'object') {\n    const keys = Object.keys(val);\n    if (keys.length === 0) return '<span class=\"fje-bracket\">{}</span>';\n    const lim = Math.min(keys.length, MAX_OBJ_KEYS);\n    let h = '<span class=\"fje-bracket\">{</span>\\n';\n    for (let i = 0; i < lim; i++) {\n      const k = keys[i];\n      h += pad1 + '<span class=\"fje-key\">"' + esc(k) + '"</span>: ' + renderTree(val[k], depth + 1);\n      if (i < keys.length - 1) h += ',';\n      h += '\\n';\n    }\n    if (keys.length > MAX_OBJ_KEYS)\n      h += pad1 + '<span class=\"fje-ellipsis\">... ' + (keys.length - MAX_OBJ_KEYS) + ' more keys</span>\\n';\n    h += pad + '<span class=\"fje-bracket\">}</span>';\n    return h;\n  }\n  return esc(String(val));\n}\n\nconst statusEl = popDoc.getElementById('fje-status');\nconst resultsDiv = popDoc.getElementById('fje-results');\nconst searchInput = popDoc.getElementById('fje-search');\n\nstatusEl.textContent = 'Indexing ' + taskId + '...';\n\n// Yield to let the UI paint\nawait new Promise(r => setTimeout(r, 50));\n\nconst entries = flattenJSON(pageProps);\nconst fuse = new Fuse(entries, {\n  keys: [\n    { name: 'key', weight: 2 },\n    { name: 'value', weight: 1 },\n    { name: 'path', weight: 0.5 }\n  ],\n  threshold: FUSE_THRESHOLD,\n  includeScore: true,\n  includeMatches: true,\n  ignoreLocation: true,\n  minMatchCharLength: 2\n});\n\nstatusEl.textContent = 'Indexed ' + entries.length + ' entries from task ' + taskId + '. Ready.';\nresultsDiv.innerHTML = '<div class=\"fje-hint\">Type to search keys and values...</div>';\n\nfunction doSearch(query) {\n  if (!query || query.trim().length < 1) {\n    resultsDiv.innerHTML = '<div class=\"fje-hint\">Type to search keys and values...</div>';\n    statusEl.textContent = 'Indexed ' + entries.length + ' entries. Ready.';\n    return;\n  }\n  const t0 = performance.now();\n  const results = fuse.search(query.trim(), { limit: RESULTS_LIMIT });\n  const ms = (performance.now() - t0).toFixed(1);\n  statusEl.textContent = results.length + ' result' + (results.length !== 1 ? 's' : '') + ' in ' + ms + ' ms (from ' + entries.length + ' entries)';\n  if (results.length === 0) {\n    resultsDiv.innerHTML = '<div class=\"fje-hint\">No matches found.</div>';\n    return;\n  }\n  const frag = popDoc.createDocumentFragment();\n  for (let ri = 0; ri < results.length; ri++) {\n    const r = results[ri];\n    let matchedOn = (r.matches || []).map(m => m.key);\n    matchedOn = matchedOn.filter((v, i, a) => a.indexOf(v) === i).join(', ');\n    const card = popDoc.createElement('div');\n    card.className = 'fje-result-card';\n    const pathEl = popDoc.createElement('div');\n    pathEl.className = 'fje-path';\n    pathEl.innerHTML = '<span>' + esc(r.item.path) + '</span><span><span class=\"fje-match-field\">matched: ' + esc(matchedOn) + '</span> <span class=\"fje-score\">score: ' + r.score.toFixed(4) + '</span></span>';\n    const treeEl = popDoc.createElement('div');\n    treeEl.className = 'fje-tree';\n    const pre = popDoc.createElement('pre');\n    pre.innerHTML = renderTree(r.item.subtree, 0);\n    treeEl.appendChild(pre);\n    card.appendChild(pathEl);\n    card.appendChild(treeEl);\n    frag.appendChild(card);\n  }\n  resultsDiv.innerHTML = '';\n  resultsDiv.appendChild(frag);\n}\n\nlet timer;\nsearchInput.addEventListener('input', () => {\n  clearTimeout(timer);\n  timer = setTimeout(() => doSearch(searchInput.value), DEBOUNCE_MS);\n});\nsearchInput.focus();"
-  },
-  "config": {
-    "fuseThreshold": 0.4,
-    "idSource": "clipboard",
-    "resultsLimit": 50
-  },
   "configSchema": [
     {
       "id": "idSource",
       "label": "Get Task ID from",
+      "type": "select",
+      "default": "clipboard",
       "options": [
         {
           "label": "Clipboard",
@@ -24,12 +18,13 @@
           "label": "Prompt (manual entry)",
           "value": "prompt"
         }
-      ],
-      "type": "select"
+      ]
     },
     {
       "id": "fuseThreshold",
       "label": "Fuse.js threshold (0=exact, 1=loose)",
+      "type": "select",
+      "default": "0.4",
       "options": [
         {
           "label": "0.2 (strict)",
@@ -51,12 +46,13 @@
           "label": "0.6 (loose)",
           "value": "0.6"
         }
-      ],
-      "type": "select"
+      ]
     },
     {
       "id": "resultsLimit",
       "label": "Max results",
+      "type": "select",
+      "default": "50",
       "options": [
         {
           "label": "25",
@@ -70,11 +66,12 @@
           "label": "100",
           "value": "100"
         }
-      ],
-      "type": "select"
+      ]
     }
   ],
-  "enabled": false,
+  "commandNames": [
+    "fuzzy_json_search"
+  ],
   "id": "fuzzy-json-search",
   "name": "Fuzzy JSON Search",
   "type": "plugin"

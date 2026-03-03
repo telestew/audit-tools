@@ -81,6 +81,223 @@ function restoreDirHandle() {
     });
 }
 
+function escapeHtml(value) {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function unwrapGeneratedPluginScript(code) {
+    const prefix = `// Auto-generated plugin script`;
+    if (!code.startsWith(prefix)) return code;
+    const startMarker = '\n    try {\n';
+    const endMarker = "\n    } catch (e) { console.error('Plugin error:', e); }\n})();";
+    const start = code.indexOf(startMarker);
+    const end = code.lastIndexOf(endMarker);
+    if (start === -1 || end === -1 || end < start) return code;
+    return code.slice(start + startMarker.length, end).replace(/\s+$/, '');
+}
+
+async function loadPackagedScript(path) {
+    try {
+        const response = await fetch(chrome.runtime.getURL(path));
+        if (!response.ok) return null;
+        const text = await response.text();
+        return unwrapGeneratedPluginScript(text);
+    } catch (_) {
+        return null;
+    }
+}
+
+function utf8Encode(text) {
+    return new TextEncoder().encode(text);
+}
+
+function utf8Decode(bytes) {
+    return new TextDecoder().decode(bytes);
+}
+
+const CRC32_TABLE = (() => {
+    const table = new Uint32Array(256);
+    for (let i = 0; i < 256; i++) {
+        let c = i;
+        for (let j = 0; j < 8; j++) {
+            c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+        }
+        table[i] = c >>> 0;
+    }
+    return table;
+})();
+
+function crc32(data) {
+    let c = 0xFFFFFFFF;
+    for (let i = 0; i < data.length; i++) {
+        c = CRC32_TABLE[(c ^ data[i]) & 0xFF] ^ (c >>> 8);
+    }
+    return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+function concatUint8(chunks, totalLength) {
+    const out = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const chunk of chunks) {
+        out.set(chunk, offset);
+        offset += chunk.length;
+    }
+    return out;
+}
+
+function createZip(entries) {
+    const localParts = [];
+    const centralParts = [];
+    let localOffset = 0;
+    let localSize = 0;
+    let centralSize = 0;
+
+    entries.forEach((entry) => {
+        const nameBytes = utf8Encode(entry.name);
+        const dataBytes = entry.data;
+        const crc = crc32(dataBytes);
+
+        const localHeader = new Uint8Array(30 + nameBytes.length);
+        const localView = new DataView(localHeader.buffer);
+        localView.setUint32(0, 0x04034b50, true);
+        localView.setUint16(4, 20, true);
+        localView.setUint16(6, 0, true);
+        localView.setUint16(8, 0, true); // STORE
+        localView.setUint16(10, 0, true);
+        localView.setUint16(12, 0, true);
+        localView.setUint32(14, crc, true);
+        localView.setUint32(18, dataBytes.length, true);
+        localView.setUint32(22, dataBytes.length, true);
+        localView.setUint16(26, nameBytes.length, true);
+        localView.setUint16(28, 0, true);
+        localHeader.set(nameBytes, 30);
+
+        localParts.push(localHeader, dataBytes);
+        localSize += localHeader.length + dataBytes.length;
+
+        const centralHeader = new Uint8Array(46 + nameBytes.length);
+        const centralView = new DataView(centralHeader.buffer);
+        centralView.setUint32(0, 0x02014b50, true);
+        centralView.setUint16(4, 20, true);
+        centralView.setUint16(6, 20, true);
+        centralView.setUint16(8, 0, true);
+        centralView.setUint16(10, 0, true);
+        centralView.setUint16(12, 0, true);
+        centralView.setUint16(14, 0, true);
+        centralView.setUint32(16, crc, true);
+        centralView.setUint32(20, dataBytes.length, true);
+        centralView.setUint32(24, dataBytes.length, true);
+        centralView.setUint16(28, nameBytes.length, true);
+        centralView.setUint16(30, 0, true);
+        centralView.setUint16(32, 0, true);
+        centralView.setUint16(34, 0, true);
+        centralView.setUint16(36, 0, true);
+        centralView.setUint32(38, 0, true);
+        centralView.setUint32(42, localOffset, true);
+        centralHeader.set(nameBytes, 46);
+
+        centralParts.push(centralHeader);
+        centralSize += centralHeader.length;
+        localOffset += localHeader.length + dataBytes.length;
+    });
+
+    const eocd = new Uint8Array(22);
+    const eocdView = new DataView(eocd.buffer);
+    eocdView.setUint32(0, 0x06054b50, true);
+    eocdView.setUint16(4, 0, true);
+    eocdView.setUint16(6, 0, true);
+    eocdView.setUint16(8, entries.length, true);
+    eocdView.setUint16(10, entries.length, true);
+    eocdView.setUint32(12, centralSize, true);
+    eocdView.setUint32(16, localSize, true);
+    eocdView.setUint16(20, 0, true);
+
+    return concatUint8([...localParts, ...centralParts, eocd], localSize + centralSize + eocd.length);
+}
+
+async function inflateRaw(data) {
+    if (typeof DecompressionStream === 'undefined') {
+        throw new Error('This browser does not support ZIP deflate decompression');
+    }
+    const ds = new DecompressionStream('deflate-raw');
+    const stream = new Blob([data]).stream().pipeThrough(ds);
+    const buffer = await new Response(stream).arrayBuffer();
+    return new Uint8Array(buffer);
+}
+
+async function parseZip(arrayBuffer) {
+    const bytes = new Uint8Array(arrayBuffer);
+    const view = new DataView(arrayBuffer);
+    const minEocd = 22;
+    const maxComment = 65535;
+    const start = Math.max(0, bytes.length - minEocd - maxComment);
+    let eocdOffset = -1;
+    for (let i = bytes.length - minEocd; i >= start; i--) {
+        if (view.getUint32(i, true) === 0x06054b50) {
+            eocdOffset = i;
+            break;
+        }
+    }
+    if (eocdOffset === -1) throw new Error('Invalid ZIP: EOCD not found');
+
+    const centralDirSize = view.getUint32(eocdOffset + 12, true);
+    const centralDirOffset = view.getUint32(eocdOffset + 16, true);
+    const centralEnd = centralDirOffset + centralDirSize;
+    const out = new Map();
+    let ptr = centralDirOffset;
+
+    while (ptr < centralEnd) {
+        if (view.getUint32(ptr, true) !== 0x02014b50) {
+            throw new Error('Invalid ZIP: bad central directory record');
+        }
+        const compression = view.getUint16(ptr + 10, true);
+        const compressedSize = view.getUint32(ptr + 20, true);
+        const fileNameLength = view.getUint16(ptr + 28, true);
+        const extraLength = view.getUint16(ptr + 30, true);
+        const commentLength = view.getUint16(ptr + 32, true);
+        const localHeaderOffset = view.getUint32(ptr + 42, true);
+        const nameBytes = bytes.slice(ptr + 46, ptr + 46 + fileNameLength);
+        const name = utf8Decode(nameBytes);
+
+        if (view.getUint32(localHeaderOffset, true) !== 0x04034b50) {
+            throw new Error(`Invalid ZIP local header: ${name}`);
+        }
+        const localNameLen = view.getUint16(localHeaderOffset + 26, true);
+        const localExtraLen = view.getUint16(localHeaderOffset + 28, true);
+        const dataStart = localHeaderOffset + 30 + localNameLen + localExtraLen;
+        const compressed = bytes.slice(dataStart, dataStart + compressedSize);
+
+        let data;
+        if (compression === 0) {
+            data = compressed;
+        } else if (compression === 8) {
+            data = await inflateRaw(compressed);
+        } else {
+            throw new Error(`Unsupported ZIP compression method ${compression} for ${name}`);
+        }
+        out.set(name, data);
+
+        ptr += 46 + fileNameLength + extraLength + commentLength;
+    }
+    return out;
+}
+
+async function scriptFileExists(filename) {
+    const dir = await getScriptsDir();
+    if (!dir) return false;
+    try {
+        await dir.getFileHandle(filename);
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
 // Write a plugin script file to plugin_scripts/
 async function writePluginScript(filename, code) {
     const dir = await getScriptsDir();
@@ -128,9 +345,9 @@ async function syncPluginScripts(plugin) {
 }
 
 // Sync all plugins' script files
-async function syncAllPluginScripts() {
-    const { plugins = [] } = await chrome.storage.local.get('plugins');
-    for (const p of plugins) {
+    async function syncAllPluginScripts() {
+        const { plugins = [] } = await chrome.storage.local.get('plugins');
+        for (const p of plugins) {
         if (p.type === 'plugin') {
             await syncPluginScripts(p);
         }
@@ -141,6 +358,66 @@ document.addEventListener("DOMContentLoaded", async () => {
     const list = document.getElementById('plugin-list');
 
     let draggedItem = null;
+    let enabledStates = {};
+
+    const isPluginEnabled = (item) => {
+        return enabledStates[item.id] !== false;
+    };
+
+    const sanitizePluginsForStorage = (plugins) => {
+        return plugins.map((item) => {
+            if (item.type !== 'plugin') return item;
+            return { ...item };
+        });
+    };
+
+    async function setPluginEnabled(pluginId, value) {
+        enabledStates = { ...enabledStates, [pluginId]: !!value };
+        await chrome.storage.local.set({ pluginEnabledStates: enabledStates });
+    }
+
+    async function selectPluginsForExport(allPlugins) {
+        const exportableItems = allPlugins.filter(p => p.type === 'plugin' || p.type === 'group');
+        if (exportableItems.length === 0) return [];
+
+        return new Promise((resolve) => {
+            const overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;';
+            const panel = document.createElement('div');
+            const isDark = document.documentElement.classList.contains('dark');
+            const panelBg = isDark ? '#232326' : '#ffffff';
+            const panelText = isDark ? '#f1f1f1' : '#1a1a1a';
+            const panelBorder = isDark ? '#47474c' : '#d8d8de';
+            panel.style.cssText = `width:min(560px,95vw);max-height:80vh;overflow:auto;background:${panelBg};color:${panelText};border:1px solid ${panelBorder};border-radius:8px;padding:16px;box-shadow:0 18px 50px rgba(0,0,0,.4);`;
+            panel.innerHTML = '<h3 style=\"margin:0 0 10px 0;\">Select Plugins to Export</h3><div id=\"export-checklist\" style=\"display:flex;flex-direction:column;gap:8px;margin-bottom:12px;\"></div><div style=\"display:flex;gap:8px;justify-content:flex-end;\"><button id=\"exp-cancel\" class=\"secondary\">Cancel</button><button id=\"exp-all\" class=\"secondary\">Select All</button><button id=\"exp-none\" class=\"secondary\">Select None</button><button id=\"exp-ok\">Export</button></div>';
+            overlay.appendChild(panel);
+            document.body.appendChild(overlay);
+
+            const listEl = panel.querySelector('#export-checklist');
+            exportableItems.forEach((p) => {
+                const row = document.createElement('label');
+                row.style.cssText = 'display:flex;align-items:center;gap:8px;';
+                const typeLabel = p.type === 'group' ? 'group' : 'plugin';
+                row.innerHTML = `<input type=\"checkbox\" data-id=\"${escapeHtml(p.id)}\" checked><span>${escapeHtml(p.name)} <span style=\"opacity:.7;font-size:12px;\">(${typeLabel}: ${escapeHtml(p.id)})</span></span>`;
+                listEl.appendChild(row);
+            });
+
+            const done = (result) => {
+                overlay.remove();
+                resolve(result);
+            };
+
+            panel.querySelector('#exp-cancel').onclick = () => done(null);
+            panel.querySelector('#exp-all').onclick = () => listEl.querySelectorAll('input[type=\"checkbox\"]').forEach(cb => cb.checked = true);
+            panel.querySelector('#exp-none').onclick = () => listEl.querySelectorAll('input[type=\"checkbox\"]').forEach(cb => cb.checked = false);
+            panel.querySelector('#exp-ok').onclick = () => {
+                const selected = Array.from(listEl.querySelectorAll('input[type=\"checkbox\"]'))
+                    .filter(cb => cb.checked)
+                    .map(cb => cb.dataset.id);
+                done(selected);
+            };
+        });
+    }
 
     async function applyTheme(theme) {
         let finalTheme = theme;
@@ -162,7 +439,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     async function render() {
-        const { plugins = [], theme = 'auto', shortcutMappings = {} } = await chrome.storage.local.get(['plugins', 'theme', 'shortcutMappings']);
+        const data = await chrome.storage.local.get(['plugins', 'theme', 'shortcutMappings', 'pluginEnabledStates']);
+        const plugins = data.plugins || [];
+        const theme = data.theme || 'auto';
+        const shortcutMappings = data.shortcutMappings || {};
+        enabledStates = data.pluginEnabledStates || {};
 
         const chromeCommands = await new Promise(resolve => chrome.commands.getAll(resolve));
         const getShortcut = (name) => chromeCommands.find(c => c.name === name)?.shortcut || 'Not set';
@@ -173,7 +454,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         const availableCommands = [];
         plugins.forEach(p => {
-            if (p.enabled) {
+            if (isPluginEnabled(p)) {
                 const cmdNames = p.commandNames || [];
                 cmdNames.forEach(cmd => {
                     availableCommands.push({ id: `${p.id}:${cmd}`, label: `${p.name}: ${cmd}` });
@@ -215,7 +496,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         plugins.forEach((item, index) => {
             const card = document.createElement('div');
             card.className = item.type === 'group' ? 'plugin-card group-card' : 'plugin-card';
-            if (item.type === 'plugin' && !item.enabled) card.classList.add('disabled');
+            if (item.type === 'plugin' && !isPluginEnabled(item)) card.classList.add('disabled');
             card.draggable = true;
             card.dataset.index = index;
 
@@ -224,7 +505,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     <div class="plugin-header">
                         <span class="drag-handle">☰</span>
                         <div class="plugin-info">
-                            <input type="text" class="group-name-input" value="${item.name}" data-id="${item.id}" placeholder="Group Name">
+                            <input type="text" class="group-name-input" value="${escapeHtml(item.name)}" data-id="${escapeHtml(item.id)}" placeholder="Group Name">
                         </div>
                         <div class="actions">
                             <button class="delete-btn danger">Delete</button>
@@ -240,14 +521,14 @@ document.addEventListener("DOMContentLoaded", async () => {
                     <div class="plugin-header">
                         <span class="drag-handle">☰</span>
                         <div class="plugin-info">
-                            <span class="plugin-name">${item.name}</span>
-                            <span class="plugin-id">ID: ${item.id}</span>
+                            <span class="plugin-name">${escapeHtml(item.name)}</span>
+                            <span class="plugin-id">ID: ${escapeHtml(item.id)}</span>
                         </div>
                         <div class="actions">
                             <label class="switch-container" style="display:flex; align-items:center; gap:8px;">
                                 <span style="font-size: 12px; font-weight: bold;">Plugin Active</span>
                                 <label class="switch">
-                                    <input type="checkbox" class="toggle-plugin" ${item.enabled ? 'checked' : ''}>
+                                    <input type="checkbox" class="toggle-plugin" ${isPluginEnabled(item) ? 'checked' : ''}>
                                     <span class="slider"></span>
                                 </label>
                             </label>
@@ -262,7 +543,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                             <div class="tab-btn" data-tab="commands">Commands</div>
                         </div>
                         <div class="tab-content json-tab">
-                            <textarea class="editor" spellcheck="false">${JSON.stringify(item, null, 2)}</textarea>
+                            <textarea class="editor" spellcheck="false">${escapeHtml(JSON.stringify(item, null, 2))}</textarea>
                         </div>
                         <div class="tab-content scripts-tab hidden">
                             <div class="scripts-editors"></div>
@@ -278,7 +559,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 `;
 
                 card.querySelector('.toggle-plugin').onchange = async (e) => {
-                    item.enabled = e.target.checked;
+                    await setPluginEnabled(item.id, e.target.checked);
                     await savePlugins(plugins);
                 };
                 
@@ -319,8 +600,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                             const div = document.createElement('div');
                             div.style.marginBottom = '15px';
                             div.innerHTML = `
-                                <div style="font-size: 12px; font-weight: bold; margin-bottom: 5px;">Script #${i+1} (${cs.matches.join(', ')})</div>
-                                <textarea class="cs-editor" data-index="${i}" spellcheck="false">${code}</textarea>
+                                <div style="font-size: 12px; font-weight: bold; margin-bottom: 5px;">Script #${i+1} (${escapeHtml(cs.matches.join(', '))})</div>
+                                <textarea class="cs-editor" data-index="${i}" spellcheck="false">${escapeHtml(code)}</textarea>
                             `;
                             scriptsEditorsList.appendChild(div);
                             CodeMirror.fromTextArea(div.querySelector('textarea'), {
@@ -343,8 +624,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                             const div = document.createElement('div');
                             div.style.marginBottom = '15px';
                             div.innerHTML = `
-                                <div style="font-size: 12px; font-weight: bold; margin-bottom: 5px;">${cmd}</div>
-                                <textarea class="cmd-editor" data-cmd="${cmd}" spellcheck="false">${code}</textarea>
+                                <div style="font-size: 12px; font-weight: bold; margin-bottom: 5px;">${escapeHtml(cmd)}</div>
+                                <textarea class="cmd-editor" data-cmd="${escapeHtml(cmd)}" spellcheck="false">${escapeHtml(code)}</textarea>
                             `;
                             commandEditorsList.appendChild(div);
                             CodeMirror.fromTextArea(div.querySelector('textarea'), {
@@ -416,7 +697,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                             updated.commandNames = Object.keys(updated.commands);
                             delete updated.commands;
                         }
-                        // Remove legacy config object
+                        // Remove config object; configSchema drives settings
                         delete updated.config;
 
                         plugins[index] = updated;
@@ -437,6 +718,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     // Clean up separated code storage and settings
                     if (item.type === 'plugin') {
                         const keysToRemove = [];
+                        delete enabledStates[item.id];
                         keysToRemove.push(`plugin_settings_${item.id.replace(/-/g, '_')}`);
                         if (item.contentScripts) {
                             for (let i = 0; i < item.contentScripts.length; i++) {
@@ -509,7 +791,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     async function savePlugins(plugins) {
-        await chrome.storage.local.set({ plugins });
+        await chrome.storage.local.set({ plugins: sanitizePluginsForStorage(plugins), pluginEnabledStates: enabledStates });
         render(); // Re-render to update order and indices
     }
 
@@ -519,10 +801,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         const id = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
         const { plugins = [] } = await chrome.storage.local.get('plugins');
         plugins.push({ 
-            id, name, enabled: false, type: 'plugin',
+            id, name, type: 'plugin',
             configSchema: [], 
             contentScripts: [], commandNames: [] 
         });
+        await setPluginEnabled(id, false);
         await savePlugins(plugins);
     };
 
@@ -538,10 +821,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     };
 
     document.getElementById('export-all').onclick = async () => {
-        const { plugins } = await chrome.storage.local.get('plugins');
+        const { plugins = [], pluginEnabledStates = {} } = await chrome.storage.local.get(['plugins', 'pluginEnabledStates']);
+        const selectedItemIds = await selectPluginsForExport(plugins);
+        if (selectedItemIds === null) return;
         // Reassemble code into plugin objects for portable export
         const assembled = [];
-        for (const p of (plugins || [])) {
+        for (const p of plugins) {
+            if (!selectedItemIds.includes(p.id)) continue;
             const out = { ...p };
             if (out.type === 'plugin') {
                 // Reassemble content script code
@@ -567,12 +853,84 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
             assembled.push(out);
         }
-        const blob = new Blob([JSON.stringify(assembled, null, 2)], { type: 'application/json' });
+        const exportPayload = {
+            format: 'audit-tools-plugin-export',
+            version: 2,
+            pluginEnabledStates: Object.fromEntries(
+                Object.entries(pluginEnabledStates).filter(([id]) => selectedItemIds.includes(id))
+            ),
+            plugins: assembled
+        };
+        const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         a.download = 'audit_tools_plugins.json';
         a.click();
+    };
+
+    document.getElementById('export-zip').onclick = async () => {
+        const { plugins = [], pluginEnabledStates = {} } = await chrome.storage.local.get(['plugins', 'pluginEnabledStates']);
+        const selectedItemIds = await selectPluginsForExport(plugins);
+        if (selectedItemIds === null) return;
+        const entries = [];
+        const bundle = {
+            format: 'audit-tools-plugin-bundle',
+            version: 1,
+            exportedAt: new Date().toISOString(),
+            pluginEnabledStates: Object.fromEntries(
+                Object.entries(pluginEnabledStates).filter(([id]) => selectedItemIds.includes(id))
+            ),
+            plugins: plugins.filter(p => selectedItemIds.includes(p.id))
+        };
+        entries.push({ name: 'bundle.json', data: utf8Encode(JSON.stringify(bundle, null, 2)) });
+
+        for (const p of plugins) {
+            if (p.type !== 'plugin') continue;
+            if (!selectedItemIds.includes(p.id)) continue;
+            const idSafe = p.id.replace(/-/g, '_');
+            if (p.contentScripts) {
+                for (let i = 0; i < p.contentScripts.length; i++) {
+                    const key = `plugin_code_${idSafe}_cs_${i}`;
+                    const result = await chrome.storage.local.get(key);
+                    const filename = `${idSafe}_cs_${i}.js`;
+                    let code = result[key];
+                    if (code === undefined || code === '') {
+                        code = await loadPackagedScript(`plugin_scripts/${filename}`);
+                    }
+                    if (code !== undefined && code !== '') {
+                        entries.push({
+                            name: `plugin_scripts/${filename}`,
+                            data: utf8Encode(code)
+                        });
+                    }
+                }
+            }
+            for (const cmd of (p.commandNames || [])) {
+                const key = `plugin_code_${idSafe}_cmd_${cmd}`;
+                const result = await chrome.storage.local.get(key);
+                const filename = `${idSafe}_cmd_${cmd}.js`;
+                let code = result[key];
+                if (code === undefined || code === '') {
+                    code = await loadPackagedScript(`plugin_scripts/${filename}`);
+                }
+                if (code !== undefined && code !== '') {
+                    entries.push({
+                        name: `plugin_scripts/${filename}`,
+                        data: utf8Encode(code)
+                    });
+                }
+            }
+        }
+
+        const zip = createZip(entries);
+        const blob = new Blob([zip], { type: 'application/zip' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'audit_tools_plugins.zip';
+        a.click();
+        URL.revokeObjectURL(url);
     };
 
     document.getElementById('import-file').onchange = async (e) => {
@@ -581,8 +939,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         const reader = new FileReader();
         reader.onload = async (ev) => {
             try {
-                let imported = JSON.parse(ev.target.result);
-                if (!Array.isArray(imported)) imported = [imported];
+                const parsed = JSON.parse(ev.target.result);
+                if (!Array.isArray(parsed?.plugins) || typeof parsed?.pluginEnabledStates !== 'object' || parsed.pluginEnabledStates === null) {
+                    throw new Error('Invalid format. Expected { plugins: [...], pluginEnabledStates: {...} }');
+                }
+                const imported = parsed.plugins;
+                const importedEnabledStates = parsed.pluginEnabledStates;
                 
                 const { plugins = [] } = await chrome.storage.local.get('plugins');
                 const action = confirm('Merge with existing items? (OK to Merge, Cancel to Replace)');
@@ -593,16 +955,31 @@ document.addEventListener("DOMContentLoaded", async () => {
                     if (p.type === 'plugin') {
                         // Save code to separated storage
                         const codeToStore = {};
+                        const pluginIdSafe = p.id.replace(/-/g, '_');
                         if (p.contentScripts) {
                             for (let i = 0; i < p.contentScripts.length; i++) {
                                 if (p.contentScripts[i].code) {
-                                    codeToStore[`plugin_code_${p.id.replace(/-/g, '_')}_cs_${i}`] = p.contentScripts[i].code;
+                                    codeToStore[`plugin_code_${pluginIdSafe}_cs_${i}`] = p.contentScripts[i].code;
+                                } else {
+                                    const packaged = await loadPackagedScript(`plugin_scripts/${pluginIdSafe}_cs_${i}.js`);
+                                    if (packaged !== null) {
+                                        codeToStore[`plugin_code_${pluginIdSafe}_cs_${i}`] = packaged;
+                                    }
                                 }
                             }
                         }
                         if (p.commands) {
                             for (const [cmd, code] of Object.entries(p.commands)) {
-                                codeToStore[`plugin_code_${p.id.replace(/-/g, '_')}_cmd_${cmd}`] = code;
+                                codeToStore[`plugin_code_${pluginIdSafe}_cmd_${cmd}`] = code;
+                            }
+                        }
+                        const cmdNames = p.commandNames || [];
+                        for (const cmd of cmdNames) {
+                            if (!codeToStore[`plugin_code_${pluginIdSafe}_cmd_${cmd}`]) {
+                                const packaged = await loadPackagedScript(`plugin_scripts/${pluginIdSafe}_cmd_${cmd}.js`);
+                                if (packaged !== null) {
+                                    codeToStore[`plugin_code_${pluginIdSafe}_cmd_${cmd}`] = packaged;
+                                }
                             }
                         }
                         if (Object.keys(codeToStore).length > 0) {
@@ -613,8 +990,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                             const sk = `plugin_settings_${p.id.replace(/-/g, '_')}`;
                             const defaults = {};
                             p.configSchema.forEach(f => {
-                                // Use config value if present (legacy), else schema default
-                                defaults[f.id] = (p.config && p.config[f.id] !== undefined) ? p.config[f.id] : f.default;
+                                defaults[f.id] = f.default;
                             });
                             await chrome.storage.local.set({ [sk]: defaults });
                         }
@@ -638,6 +1014,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
 
                 let newPlugins;
+                let newEnabledStates;
                 if (action) {
                     newPlugins = [...plugins];
                     strippedImported.forEach(p => {
@@ -645,9 +1022,21 @@ document.addEventListener("DOMContentLoaded", async () => {
                         if (idx > -1) newPlugins[idx] = p;
                         else newPlugins.push(p);
                     });
+                    newEnabledStates = { ...enabledStates };
+                    strippedImported.forEach(p => {
+                        if (p.type !== 'plugin') return;
+                        if (importedEnabledStates[p.id] !== undefined) newEnabledStates[p.id] = !!importedEnabledStates[p.id];
+                        else if (newEnabledStates[p.id] === undefined) newEnabledStates[p.id] = true;
+                    });
                 } else {
                     newPlugins = strippedImported;
+                    newEnabledStates = {};
+                    strippedImported.forEach(p => {
+                        if (p.type !== 'plugin') return;
+                        newEnabledStates[p.id] = importedEnabledStates[p.id] !== undefined ? !!importedEnabledStates[p.id] : true;
+                    });
                 }
+                enabledStates = newEnabledStates;
                 await savePlugins(newPlugins);
                 // Sync all scripts to disk after import
                 try {
@@ -659,6 +1048,131 @@ document.addEventListener("DOMContentLoaded", async () => {
             } catch (e) { alert('Import failed: ' + e.message); }
         };
         reader.readAsText(file);
+    };
+
+    document.getElementById('import-zip-file').onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        try {
+            const zipEntries = await parseZip(await file.arrayBuffer());
+            const bundleData = zipEntries.get('bundle.json');
+            if (!bundleData) throw new Error('bundle.json missing in ZIP');
+            const bundle = JSON.parse(utf8Decode(bundleData));
+            const imported = Array.isArray(bundle?.plugins) ? bundle.plugins : [];
+            if (typeof bundle?.pluginEnabledStates !== 'object' || bundle.pluginEnabledStates === null) {
+                throw new Error('Invalid ZIP bundle: pluginEnabledStates missing');
+            }
+            const importedEnabledStates = bundle.pluginEnabledStates;
+
+            const { plugins = [] } = await chrome.storage.local.get('plugins');
+            const merge = confirm('Merge with existing items? (OK to Merge, Cancel to Replace)');
+
+            const strippedImported = [];
+            for (const p of imported) {
+                if (p.type !== 'plugin') {
+                    strippedImported.push(p);
+                    continue;
+                }
+
+                const idSafe = p.id.replace(/-/g, '_');
+                const codeToStore = {};
+
+                if (p.contentScripts) {
+                    for (let i = 0; i < p.contentScripts.length; i++) {
+                        const filename = `${idSafe}_cs_${i}.js`;
+                        const zipName = `plugin_scripts/${filename}`;
+                        const scriptData = zipEntries.get(zipName);
+                        if (!scriptData) continue;
+                        const code = utf8Decode(scriptData);
+                        codeToStore[`plugin_code_${idSafe}_cs_${i}`] = code;
+                        try {
+                            if (!(await scriptFileExists(filename))) {
+                                await writePluginScript(filename, code);
+                            }
+                        } catch (_) {}
+                    }
+                }
+
+                for (const cmd of (p.commandNames || [])) {
+                    const filename = `${idSafe}_cmd_${cmd}.js`;
+                    const zipName = `plugin_scripts/${filename}`;
+                    const scriptData = zipEntries.get(zipName);
+                    if (!scriptData) continue;
+                    const code = utf8Decode(scriptData);
+                    codeToStore[`plugin_code_${idSafe}_cmd_${cmd}`] = code;
+                    try {
+                        if (!(await scriptFileExists(filename))) {
+                            await writePluginScript(filename, code);
+                        }
+                    } catch (_) {}
+                }
+
+                if (Object.keys(codeToStore).length > 0) {
+                    await chrome.storage.local.set(codeToStore);
+                }
+
+                if (p.configSchema) {
+                    const sk = `plugin_settings_${idSafe}`;
+                    const defaults = {};
+                    p.configSchema.forEach(f => {
+                        defaults[f.id] = f.default;
+                    });
+                    const existing = await chrome.storage.local.get(sk);
+                    if (!existing[sk]) {
+                        await chrome.storage.local.set({ [sk]: defaults });
+                    }
+                }
+
+                const stripped = { ...p };
+                delete stripped.config;
+                if (stripped.contentScripts) {
+                    stripped.contentScripts = stripped.contentScripts.map(cs => {
+                        const { code, ...rest } = cs;
+                        return rest;
+                    });
+                }
+                if (stripped.commands) {
+                    stripped.commandNames = Object.keys(stripped.commands);
+                    delete stripped.commands;
+                }
+                strippedImported.push(stripped);
+            }
+
+            let newPlugins;
+            let newEnabledStates;
+            if (merge) {
+                newPlugins = [...plugins];
+                strippedImported.forEach(p => {
+                    const idx = newPlugins.findIndex(existing => existing.id === p.id);
+                    if (idx > -1) newPlugins[idx] = p;
+                    else newPlugins.push(p);
+                });
+                newEnabledStates = { ...enabledStates };
+                strippedImported.forEach((p) => {
+                    if (p.type !== 'plugin') return;
+                    if (importedEnabledStates[p.id] !== undefined) newEnabledStates[p.id] = !!importedEnabledStates[p.id];
+                    else if (newEnabledStates[p.id] === undefined) newEnabledStates[p.id] = true;
+                });
+            } else {
+                newPlugins = strippedImported;
+                newEnabledStates = {};
+                strippedImported.forEach((p) => {
+                    if (p.type !== 'plugin') return;
+                    newEnabledStates[p.id] = importedEnabledStates[p.id] !== undefined ? !!importedEnabledStates[p.id] : true;
+                });
+            }
+
+            enabledStates = newEnabledStates;
+            await savePlugins(newPlugins);
+            try {
+                await syncAllPluginScripts();
+            } catch (_) {}
+            alert('ZIP import successful!');
+        } catch (err) {
+            alert('ZIP import failed: ' + err.message);
+        } finally {
+            e.target.value = '';
+        }
     };
 
     document.getElementById('clear-all-data').onclick = async () => {

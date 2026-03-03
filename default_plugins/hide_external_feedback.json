@@ -1,23 +1,19 @@
 {
-  "config": {
-    "enabled": true
-  },
   "configSchema": [
     {
       "id": "enabled",
       "label": "Hide 'External Feedback'",
-      "type": "toggle"
+      "type": "toggle",
+      "default": true
     }
   ],
   "contentScripts": [
     {
-      "code": "const { plugin_settings_hide_external_feedback: config } =\n  await chrome.storage.local.get(\"plugin_settings_hide_external_feedback\");\n\nif (config?.enabled !== false) {\n  function hide() {\n    const xpath =\n      \"//p[text()='Task Feedback for Contributor (External)']/parent::*/parent::div\";\n    const result = document.evaluate(\n      xpath,\n      document,\n      null,\n      XPathResult.FIRST_ORDERED_NODE_TYPE,\n      null,\n    );\n    const div = result.singleNodeValue;\n    if (div) div.style.display = \"none\";\n  }\n\n  hide();\n  new MutationObserver(hide).observe(document.body, {\n    childList: true,\n    subtree: true,\n  });\n}\n",
       "matches": [
         "https://app.outlier.ai/en/expert/outlieradmin/tools/chat_bulk_audit/*"
       ]
     }
   ],
-  "enabled": true,
   "id": "hide-external-feedback-default",
   "name": "Hide External Feedback",
   "type": "plugin"
