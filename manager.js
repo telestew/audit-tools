@@ -89,6 +89,8 @@ async function writePluginScript(filename, code) {
 (async () => {
     const storageKey = window.__pluginStorageKey;
     const allData = window.__pluginAllData;
+    const pluginSettings = window.__pluginSettings || {};
+    const bridge = window.__pluginBridge;
     try {
 ${code}
     } catch (e) { console.error('Plugin error:', e); }

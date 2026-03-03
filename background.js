@@ -153,14 +153,19 @@ async function restoreDefaultPlugins() {
 async function executePluginCode(tabId, scriptFile, pluginId, allData) {
     const sk = settingsKey(pluginId);
     // First inject the storage shim with current data, then inject the plugin script
+    // Pre-resolve this plugin's settings from allData
+    const pluginConfig = allData[sk] || {};
+
     try {
-        // Inject storage shim into MAIN world so plugin code can access it
+        // Inject storage shim + bridge helper + resolved settings into MAIN world
         await chrome.scripting.executeScript({
             target: { tabId },
             world: 'MAIN',
-            func: (storageKey, allData) => {
+            func: (storageKey, allData, pluginSettings) => {
                 window.__pluginStorageKey = storageKey;
                 window.__pluginAllData = allData;
+                // Pre-resolved settings for the current plugin — plugin code uses this directly
+                window.__pluginSettings = pluginSettings;
                 if (!window.chrome) window.chrome = {};
                 if (!window.chrome.storage) window.chrome.storage = {};
                 if (!window.chrome.storage.local) window.chrome.storage.local = {
@@ -174,10 +179,46 @@ async function executePluginCode(tabId, scriptFile, pluginId, allData) {
                             return Promise.resolve(res);
                         }
                         return Promise.resolve(d);
+                    },
+                    set: (data) => {
+                        // Write-back via bridge
+                        return window.__pluginBridge('storage.set', { data });
                     }
                 };
+
+                // Generic bridge function: sends request to background via ISOLATED world relay
+                // Usage: await __pluginBridge('fetch', { url: '...', options: { method: 'POST', body: '...' } })
+                //        await __pluginBridge('cookies.get', { url: '...', name: '...' })
+                //        await __pluginBridge('notifications.create', { options: { type: 'basic', title: '...', message: '...' } })
+                //        await __pluginBridge('tabs.create', { url: '...' })
+                //        await __pluginBridge('offscreen.create', { url: '...', reasons: ['AUDIO_PLAYBACK'] })
+                window.__pluginBridge = (method, args) => {
+                    return new Promise((resolve, reject) => {
+                        const id = 'pb_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+                        function handler(evt) {
+                            if (evt.data?.type === 'plugin-bridge-response' && evt.data.id === id) {
+                                window.removeEventListener('message', handler);
+                                const r = evt.data.response;
+                                if (r?.error) reject(new Error(r.error));
+                                else resolve(r);
+                            }
+                        }
+                        window.addEventListener('message', handler);
+                        window.postMessage({
+                            type: 'plugin-bridge-request',
+                            method: method,
+                            args: args || {},
+                            id: id
+                        }, '*');
+                        // Timeout after 30s
+                        setTimeout(() => {
+                            window.removeEventListener('message', handler);
+                            reject(new Error('Bridge timeout: ' + method));
+                        }, 30000);
+                    });
+                };
             },
-            args: [sk, allData]
+            args: [sk, allData, pluginConfig]
         });
         // Inject the plugin script file
         await chrome.scripting.executeScript({
@@ -202,24 +243,27 @@ function cmdScriptPath(pluginId, cmdName) {
 
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     if (changeInfo.status === 'complete' && tab.url) {
-        // Inject ISOLATED world bridge for AI chat fetch proxy
-        if (/^https:\/\/www\.desmos\.com\/calculator/.test(tab.url)) {
+        // Inject generic ISOLATED world bridge on all http(s) pages.
+        // This relays postMessage from MAIN world plugin code to chrome.runtime,
+        // giving plugins access to privileged APIs (fetch, cookies, notifications, etc.)
+        if (/^https?:\/\//.test(tab.url)) {
             chrome.scripting.executeScript({
                 target: { tabId },
                 world: 'ISOLATED',
                 func: () => {
-                    if (window.__daiBridgeInstalled) return;
-                    window.__daiBridgeInstalled = true;
+                    if (window.__pluginBridgeInstalled) return;
+                    window.__pluginBridgeInstalled = true;
                     window.addEventListener('message', (evt) => {
                         if (evt.source !== window) return;
-                        if (evt.data?.type === 'dai-fetch-stream') {
+                        if (evt.data?.type === 'plugin-bridge-request') {
                             chrome.runtime.sendMessage({
-                                action: 'dai-fetch-stream',
-                                url: evt.data.url,
-                                options: evt.data.options
+                                action: 'plugin-bridge',
+                                method: evt.data.method,
+                                args: evt.data.args,
+                                id: evt.data.id
                             }, (response) => {
                                 window.postMessage({
-                                    type: 'dai-fetch-response',
+                                    type: 'plugin-bridge-response',
                                     id: evt.data.id,
                                     response: response
                                 }, '*');
@@ -493,42 +537,159 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 });
 
-// --- Plugin script file sync (writes .js files to plugin_scripts/) ---
-// The manager page writes files via File System Access API and notifies background
+// --- Non-bridge message handlers ---
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.action === 'sync-plugin-scripts') {
-        // Nothing to do in background — files are written directly by manager
-        sendResponse({ success: true });
-        return false;
-    }
-});
-
-// --- AI Chat fetch proxy (avoids CORS for local API) ---
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.action === 'dai-fetch-stream') {
-        const { url, options } = message;
-        fetch(url, {
-            method: options.method || 'POST',
-            headers: options.headers || {},
-            body: options.body || null
-        }).then(async resp => {
-            if (!resp.ok) {
-                sendResponse({ error: 'API error: ' + resp.status });
-                return;
-            }
-            const text = await resp.text();
-            sendResponse({ ok: true, body: text });
-        }).catch(err => {
-            sendResponse({ error: err.message });
-        });
-        return true; // keep channel open for async response
-    }
     if (message.action === 'restoreDefaults') {
         restoreDefaultPlugins().then(() => sendResponse({ success: true }));
-        return true; 
+        return true;
     }
+    return false;
 });
 
+// --- Generic plugin bridge: exposes privileged Chrome APIs to plugin content scripts ---
+// Plugin code (MAIN world) sends postMessage -> ISOLATED bridge -> chrome.runtime.sendMessage -> here
+// Supported methods:
+//   fetch: { url, options } — CORS-free fetch
+//   cookies.get: { url, name } — read a cookie
+//   cookies.getAll: { url, domain, name } — read multiple cookies
+//   cookies.set: { url, name, value, ... } — set a cookie
+//   storage.set: { data } — write to chrome.storage.local
+//   storage.get: { keys } — read from chrome.storage.local
+//   notifications.create: { id, options } — show a notification
+//   notifications.clear: { id } — clear a notification
+//   tabs.create: { url, active } — open a new tab
+//   tabs.query: { queryInfo } — query tabs
+//   tabs.sendMessage: { tabId, message } — send message to another tab
+//   offscreen.create: { url, reasons, justification } — create offscreen document
+//   offscreen.close: {} — close offscreen document
+//   action.setBadgeText: { text, tabId } — set badge text
+//   action.setBadgeBackgroundColor: { color, tabId } — set badge color
+//   action.setIcon: { path, tabId } — set extension icon
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action !== 'plugin-bridge') return false;
+
+    const { method, args } = message;
+
+    (async () => {
+        try {
+            switch (method) {
+                // --- Fetch (CORS-free) ---
+                case 'fetch': {
+                    const resp = await fetch(args.url, {
+                        method: args.options?.method || 'GET',
+                        headers: args.options?.headers || {},
+                        body: args.options?.body || null
+                    });
+                    const text = await resp.text();
+                    sendResponse({ ok: resp.ok, status: resp.status, body: text });
+                    break;
+                }
+
+                // --- Cookies ---
+                case 'cookies.get': {
+                    const cookie = await chrome.cookies.get({ url: args.url, name: args.name });
+                    sendResponse({ cookie: cookie ? { name: cookie.name, value: cookie.value, domain: cookie.domain } : null });
+                    break;
+                }
+                case 'cookies.getAll': {
+                    const cookies = await chrome.cookies.getAll(args);
+                    sendResponse({ cookies: cookies.map(c => ({ name: c.name, value: c.value, domain: c.domain })) });
+                    break;
+                }
+                case 'cookies.set': {
+                    const cookie = await chrome.cookies.set(args);
+                    sendResponse({ cookie });
+                    break;
+                }
+
+                // --- Storage (write-back) ---
+                case 'storage.set': {
+                    await chrome.storage.local.set(args.data);
+                    sendResponse({ ok: true });
+                    break;
+                }
+                case 'storage.get': {
+                    const result = await chrome.storage.local.get(args.keys || null);
+                    
+                    break;
+                }
+
+                // --- Notifications ---
+                case 'notifications.create': {
+                    chrome.notifications.create(args.id || '', args.options, (id) => {
+                        sendResponse({ id });
+                    });
+                    return; // Don't sendResponse twice — callback handles it
+                }
+                case 'notifications.clear': {
+                    chrome.notifications.clear(args.id, (cleared) => {
+                        sendResponse({ cleared });
+                    });
+                    return;
+                }
+
+                // --- Tabs ---
+                case 'tabs.create': {
+                    const tab = await chrome.tabs.create({ url: args.url, active: args.active !== false });
+                    sendResponse({ tab: { id: tab.id, url: tab.url } });
+                    break;
+                }
+                case 'tabs.query': {
+                    const tabs = await chrome.tabs.query(args.queryInfo || {});
+                    sendResponse({ tabs: tabs.map(t => ({ id: t.id, url: t.url, title: t.title, active: t.active })) });
+                    break;
+                }
+                case 'tabs.sendMessage': {
+                    const resp = await chrome.tabs.sendMessage(args.tabId, args.message);
+                    sendResponse({ response: resp });
+                    break;
+                }
+
+                // --- Offscreen ---
+                case 'offscreen.create': {
+                    await chrome.offscreen.createDocument({
+                        url: args.url,
+                        reasons: args.reasons || ['AUDIO_PLAYBACK'],
+                        justification: args.justification || 'Plugin requested offscreen document'
+                    });
+                    sendResponse({ ok: true });
+                    break;
+                }
+                case 'offscreen.close': {
+                    await chrome.offscreen.closeDocument();
+                    sendResponse({ ok: true });
+                    break;
+                }
+
+                // --- Action (badge/icon) ---
+                case 'action.setBadgeText': {
+                    await chrome.action.setBadgeText({ text: args.text || '', tabId: args.tabId });
+                    sendResponse({ ok: true });
+                    break;
+                }
+                case 'action.setBadgeBackgroundColor': {
+                    await chrome.action.setBadgeBackgroundColor({ color: args.color, tabId: args.tabId });
+                    sendResponse({ ok: true });
+                    break;
+                }
+                case 'action.setIcon': {
+                    await chrome.action.setIcon({ path: args.path, tabId: args.tabId });
+                    sendResponse({ ok: true });
+                    break;
+                }
+
+                default:
+                    sendResponse({ error: `Unknown bridge method: ${method}` });
+            }
+        } catch (e) {
+            sendResponse({ error: e.message });
+        }
+    })();
+
+    return true; // Keep channel open for async response
+});
+
+// --- Built-in CSRF token sync (used by many plugins) ---
 async function updateCsrfToken() {
     chrome.cookies.get({ url: 'https://app.outlier.ai', name: '_csrf' }, (cookie) => {
         if (cookie) chrome.storage.local.set({ csrfToken: decodeURIComponent(cookie.value) });

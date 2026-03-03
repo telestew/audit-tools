@@ -1,0 +1,39 @@
+{
+  "id": "task-notifier",
+  "name": "Task Notifier",
+  "enabled": false,
+  "type": "plugin",
+  "config": {
+    "enabled": false,
+    "period": 10,
+    "audioUrl": "https://actions.google.com/sounds/v1/alarms/beep_short.ogg"
+  },
+  "configSchema": [
+    { "id": "enabled", "type": "toggle", "label": "Enable periodic checks" },
+    { "id": "period", "type": "number", "label": "Check every (minutes)" },
+    { "id": "audioUrl", "type": "text", "label": "Sound URL (HTTPS)" }
+  ],
+  "contentScripts": [
+    {
+      "matches": ["https://app.outlier.ai/*"],
+      "code": "const { plugin_settings_task_notifier: config, csrfToken } = await chrome.storage.local.get(['plugin_settings_task_notifier', 'csrfToken']);\nif (config?.enabled) {\n  setInterval(async () => {\n    const res = await fetch('https://app.outlier.ai/corp-api/qm/assigned-operation-nodes?fetchMetadata=true&onlyPending=true&page=1&project=&sortOrder=1', {\n      headers: { 'X-CSRF-Token': csrfToken }\n    });\n    const data = await res.json();\n    if (data?.nodes?.length > 0) {\n      new Audio(config.audioUrl).play().catch(() => {\n         new Notification('New Tasks Available!');\n      });\n    }\n  }, config.period * 60000);\n}"
+    }
+  ]
+}
+{
+  "id": "task-notifier",
+  "name": "Task Notifier",
+  "enabled": false,
+  "type": "plugin",
+  "config": {
+    "enabled": false,
+    "period": 10
+  },
+  "configSchema": [
+    { "id": "enabled", "type": "toggle", "label": "Enable periodic checks" },
+    { "id": "period", "type": "number", "label": "Period (min)", "min": 0.16, "step": 0.1 }
+  ],
+  "commands": {
+    "toggle_notifications": "const key = 'plugin_settings_task_notifier'; const { [key]: config } = await chrome.storage.local.get(key); const updated = { ...config, enabled: !config.enabled }; await chrome.storage.local.set({ [key]: updated }); alert('Notifications ' + (updated.enabled ? 'ON' : 'OFF'));"
+  }
+}
