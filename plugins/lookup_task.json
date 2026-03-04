@@ -21,6 +21,6 @@
     "lookup_task"
   ],
   "id": "lookup-task",
-  "name": "Lookup Task",
+  "name": "Lookup Task by ID",
   "type": "plugin"
 }

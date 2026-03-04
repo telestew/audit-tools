@@ -7,6 +7,36 @@ body {
     font-family: Arial, sans-serif;
 }
 
+.topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.topbar h1 {
+    font-size: 2.2em;
+    margin: 0;
+}
+
+.header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.toolbar-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--card-background-color);
+}
+
 .plugin-card {
     border: 1px solid var(--border-color);
     padding: 15px;
@@ -20,12 +50,6 @@ body {
 
 .plugin-card.dragging {
     opacity: 0.5;
-}
-
-/* Disabled state for cards */
-.plugin-card.disabled {
-    filter: grayscale(0.8) opacity(0.7);
-    background-color: var(--tab-background-color);
 }
 
 /* Switch Toggle Styling */
@@ -311,4 +335,3 @@ label.button.secondary:hover {
     margin-right: 5px;
     accent-color: var(--primary-color);
 }
-

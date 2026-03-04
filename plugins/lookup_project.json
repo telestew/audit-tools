@@ -29,6 +29,6 @@
     "lookup_project"
   ],
   "id": "lookup-project",
-  "name": "Lookup Project",
+  "name": "Lookup Project by Task ID",
   "type": "plugin"
 }

@@ -1,6 +1,6 @@
 {
   "id": "task-notifier",
-  "name": "Task Notifier",
+  "name": "Task Availability Notifier",
   "type": "plugin",
   "configSchema": [
     {
@@ -12,9 +12,9 @@
     {
       "id": "period",
       "type": "number",
-      "label": "Period (min)",
-      "min": 0.16,
-      "step": 0.1,
+      "label": "Period (min, minimum 0.17)",
+      "min": 0.17,
+      "step": 0.01,
       "default": 10
     },
     {

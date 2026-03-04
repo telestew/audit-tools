@@ -1,85 +1,4 @@
-// --- File System Access API for writing plugin script files ---
-let extDirHandle = null;
-let scriptsDirHandle = null;
-
-async function getExtensionDir() {
-    if (extDirHandle) {
-        // Verify we still have permission
-        const perm = await extDirHandle.queryPermission({ mode: 'readwrite' });
-        if (perm === 'granted') return extDirHandle;
-    }
-    // Try to restore from IndexedDB
-    const restored = await restoreDirHandle();
-    if (restored) {
-        const perm = await restored.queryPermission({ mode: 'readwrite' });
-        if (perm === 'granted') {
-            extDirHandle = restored;
-            return extDirHandle;
-        }
-        // Try to re-request permission
-        const req = await restored.requestPermission({ mode: 'readwrite' });
-        if (req === 'granted') {
-            extDirHandle = restored;
-            return extDirHandle;
-        }
-    }
-    return null;
-}
-
-async function pickExtensionDir() {
-    try {
-        extDirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
-        await saveDirHandle(extDirHandle);
-        scriptsDirHandle = null; // Reset so it's re-fetched
-        return extDirHandle;
-    } catch (e) {
-        console.error('Directory picker cancelled or failed:', e);
-        return null;
-    }
-}
-
-async function getScriptsDir() {
-    if (scriptsDirHandle) return scriptsDirHandle;
-    const dir = await getExtensionDir();
-    if (!dir) return null;
-    scriptsDirHandle = await dir.getDirectoryHandle('plugin_scripts', { create: true });
-    return scriptsDirHandle;
-}
-
-// Persist directory handle in IndexedDB
-function saveDirHandle(handle) {
-    return new Promise((resolve, reject) => {
-        const req = indexedDB.open('AuditToolsFS', 1);
-        req.onupgradeneeded = (e) => {
-            e.target.result.createObjectStore('handles');
-        };
-        req.onsuccess = (e) => {
-            const db = e.target.result;
-            const tx = db.transaction('handles', 'readwrite');
-            tx.objectStore('handles').put(handle, 'extDir');
-            tx.oncomplete = () => resolve();
-            tx.onerror = () => reject(tx.error);
-        };
-        req.onerror = () => reject(req.error);
-    });
-}
-
-function restoreDirHandle() {
-    return new Promise((resolve) => {
-        const req = indexedDB.open('AuditToolsFS', 1);
-        req.onupgradeneeded = (e) => {
-            e.target.result.createObjectStore('handles');
-        };
-        req.onsuccess = (e) => {
-            const db = e.target.result;
-            const tx = db.transaction('handles', 'readonly');
-            const getReq = tx.objectStore('handles').get('extDir');
-            getReq.onsuccess = () => resolve(getReq.result || null);
-            getReq.onerror = () => resolve(null);
-        };
-        req.onerror = () => resolve(null);
-    });
-}
+// Script files always resolve from the bundled extension directory: plugin_scripts/
 
 function escapeHtml(value) {
     return String(value)
@@ -287,73 +206,6 @@ async function parseZip(arrayBuffer) {
     return out;
 }
 
-async function scriptFileExists(filename) {
-    const dir = await getScriptsDir();
-    if (!dir) return false;
-    try {
-        await dir.getFileHandle(filename);
-        return true;
-    } catch (_) {
-        return false;
-    }
-}
-
-// Write a plugin script file to plugin_scripts/
-async function writePluginScript(filename, code) {
-    const dir = await getScriptsDir();
-    if (!dir) throw new Error('Extension directory not set. Please select it in the manager.');
-    const wrapper = `// Auto-generated plugin script — do not edit directly
-(async () => {
-    const storageKey = window.__pluginStorageKey;
-    const allData = window.__pluginAllData;
-    const pluginSettings = window.__pluginSettings || {};
-    const bridge = window.__pluginBridge;
-    try {
-${code}
-    } catch (e) { console.error('Plugin error:', e); }
-})();`;
-    const fileHandle = await dir.getFileHandle(filename, { create: true });
-    const writable = await fileHandle.createWritable();
-    await writable.write(wrapper);
-    await writable.close();
-}
-
-// Write all script files for a plugin
-async function syncPluginScripts(plugin) {
-    const pluginIdSafe = plugin.id.replace(/-/g, '_');
-    // Content scripts
-    if (plugin.contentScripts) {
-        for (let i = 0; i < plugin.contentScripts.length; i++) {
-            const codeKey = `plugin_code_${pluginIdSafe}_cs_${i}`;
-            const result = await chrome.storage.local.get(codeKey);
-            const code = result[codeKey] || '';
-            if (code) {
-                await writePluginScript(`${pluginIdSafe}_cs_${i}.js`, code);
-            }
-        }
-    }
-    // Commands
-    const cmdNames = plugin.commandNames || [];
-    for (const cmd of cmdNames) {
-        const codeKey = `plugin_code_${pluginIdSafe}_cmd_${cmd}`;
-        const result = await chrome.storage.local.get(codeKey);
-        const code = result[codeKey] || '';
-        if (code) {
-            await writePluginScript(`${pluginIdSafe}_cmd_${cmd}.js`, code);
-        }
-    }
-}
-
-// Sync all plugins' script files
-    async function syncAllPluginScripts() {
-        const { plugins = [] } = await chrome.storage.local.get('plugins');
-        for (const p of plugins) {
-        if (p.type === 'plugin') {
-            await syncPluginScripts(p);
-        }
-    }
-}
-
 document.addEventListener("DOMContentLoaded", async () => {
     const list = document.getElementById('plugin-list');
 
@@ -496,7 +348,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         plugins.forEach((item, index) => {
             const card = document.createElement('div');
             card.className = item.type === 'group' ? 'plugin-card group-card' : 'plugin-card';
-            if (item.type === 'plugin' && !isPluginEnabled(item)) card.classList.add('disabled');
             card.draggable = true;
             card.dataset.index = index;
 
@@ -702,12 +553,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                         plugins[index] = updated;
                         await savePlugins(plugins);
-                        // Sync script files to disk
-                        try {
-                            await syncPluginScripts(updated);
-                        } catch (e) {
-                            console.warn('Script file sync failed (select extension directory in manager):', e);
-                        }
                         alert('Plugin updated!');
                     } catch (e) { alert('Invalid JSON: ' + e.message); }
                 };
@@ -820,55 +665,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         await savePlugins(plugins);
     };
 
-    document.getElementById('export-all').onclick = async () => {
-        const { plugins = [], pluginEnabledStates = {} } = await chrome.storage.local.get(['plugins', 'pluginEnabledStates']);
-        const selectedItemIds = await selectPluginsForExport(plugins);
-        if (selectedItemIds === null) return;
-        // Reassemble code into plugin objects for portable export
-        const assembled = [];
-        for (const p of plugins) {
-            if (!selectedItemIds.includes(p.id)) continue;
-            const out = { ...p };
-            if (out.type === 'plugin') {
-                // Reassemble content script code
-                if (out.contentScripts) {
-                    out.contentScripts = [];
-                    for (let i = 0; i < p.contentScripts.length; i++) {
-                        const codeKey = `plugin_code_${p.id.replace(/-/g, '_')}_cs_${i}`;
-                        const result = await chrome.storage.local.get(codeKey);
-                        out.contentScripts.push({ ...p.contentScripts[i], code: result[codeKey] || '' });
-                    }
-                }
-                // Reassemble command code
-                const cmdNames = out.commandNames || [];
-                if (cmdNames.length > 0) {
-                    out.commands = {};
-                    for (const cmd of cmdNames) {
-                        const codeKey = `plugin_code_${p.id.replace(/-/g, '_')}_cmd_${cmd}`;
-                        const result = await chrome.storage.local.get(codeKey);
-                        out.commands[cmd] = result[codeKey] || '';
-                    }
-                    delete out.commandNames;
-                }
-            }
-            assembled.push(out);
-        }
-        const exportPayload = {
-            format: 'audit-tools-plugin-export',
-            version: 2,
-            pluginEnabledStates: Object.fromEntries(
-                Object.entries(pluginEnabledStates).filter(([id]) => selectedItemIds.includes(id))
-            ),
-            plugins: assembled
-        };
-        const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'audit_tools_plugins.json';
-        a.click();
-    };
-
     document.getElementById('export-zip').onclick = async () => {
         const { plugins = [], pluginEnabledStates = {} } = await chrome.storage.local.get(['plugins', 'pluginEnabledStates']);
         const selectedItemIds = await selectPluginsForExport(plugins);
@@ -895,15 +691,14 @@ document.addEventListener("DOMContentLoaded", async () => {
                     const result = await chrome.storage.local.get(key);
                     const filename = `${idSafe}_cs_${i}.js`;
                     let code = result[key];
-                    if (code === undefined || code === '') {
+                    if (code === undefined) {
                         code = await loadPackagedScript(`plugin_scripts/${filename}`);
                     }
-                    if (code !== undefined && code !== '') {
-                        entries.push({
-                            name: `plugin_scripts/${filename}`,
-                            data: utf8Encode(code)
-                        });
-                    }
+                    if (code === undefined || code === null) code = '';
+                    entries.push({
+                        name: `plugin_scripts/${filename}`,
+                        data: utf8Encode(code)
+                    });
                 }
             }
             for (const cmd of (p.commandNames || [])) {
@@ -911,15 +706,14 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const result = await chrome.storage.local.get(key);
                 const filename = `${idSafe}_cmd_${cmd}.js`;
                 let code = result[key];
-                if (code === undefined || code === '') {
+                if (code === undefined) {
                     code = await loadPackagedScript(`plugin_scripts/${filename}`);
                 }
-                if (code !== undefined && code !== '') {
-                    entries.push({
-                        name: `plugin_scripts/${filename}`,
-                        data: utf8Encode(code)
-                    });
-                }
+                if (code === undefined || code === null) code = '';
+                entries.push({
+                    name: `plugin_scripts/${filename}`,
+                    data: utf8Encode(code)
+                });
             }
         }
 
@@ -931,123 +725,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         a.download = 'audit_tools_plugins.zip';
         a.click();
         URL.revokeObjectURL(url);
-    };
-
-    document.getElementById('import-file').onchange = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = async (ev) => {
-            try {
-                const parsed = JSON.parse(ev.target.result);
-                if (!Array.isArray(parsed?.plugins) || typeof parsed?.pluginEnabledStates !== 'object' || parsed.pluginEnabledStates === null) {
-                    throw new Error('Invalid format. Expected { plugins: [...], pluginEnabledStates: {...} }');
-                }
-                const imported = parsed.plugins;
-                const importedEnabledStates = parsed.pluginEnabledStates;
-                
-                const { plugins = [] } = await chrome.storage.local.get('plugins');
-                const action = confirm('Merge with existing items? (OK to Merge, Cancel to Replace)');
-                
-                // Save code blobs separately for each imported plugin
-                const strippedImported = [];
-                for (const p of imported) {
-                    if (p.type === 'plugin') {
-                        // Save code to separated storage
-                        const codeToStore = {};
-                        const pluginIdSafe = p.id.replace(/-/g, '_');
-                        if (p.contentScripts) {
-                            for (let i = 0; i < p.contentScripts.length; i++) {
-                                if (p.contentScripts[i].code) {
-                                    codeToStore[`plugin_code_${pluginIdSafe}_cs_${i}`] = p.contentScripts[i].code;
-                                } else {
-                                    const packaged = await loadPackagedScript(`plugin_scripts/${pluginIdSafe}_cs_${i}.js`);
-                                    if (packaged !== null) {
-                                        codeToStore[`plugin_code_${pluginIdSafe}_cs_${i}`] = packaged;
-                                    }
-                                }
-                            }
-                        }
-                        if (p.commands) {
-                            for (const [cmd, code] of Object.entries(p.commands)) {
-                                codeToStore[`plugin_code_${pluginIdSafe}_cmd_${cmd}`] = code;
-                            }
-                        }
-                        const cmdNames = p.commandNames || [];
-                        for (const cmd of cmdNames) {
-                            if (!codeToStore[`plugin_code_${pluginIdSafe}_cmd_${cmd}`]) {
-                                const packaged = await loadPackagedScript(`plugin_scripts/${pluginIdSafe}_cmd_${cmd}.js`);
-                                if (packaged !== null) {
-                                    codeToStore[`plugin_code_${pluginIdSafe}_cmd_${cmd}`] = packaged;
-                                }
-                            }
-                        }
-                        if (Object.keys(codeToStore).length > 0) {
-                            await chrome.storage.local.set(codeToStore);
-                        }
-                        // Save initial settings from config/configSchema defaults
-                        if (p.configSchema) {
-                            const sk = `plugin_settings_${p.id.replace(/-/g, '_')}`;
-                            const defaults = {};
-                            p.configSchema.forEach(f => {
-                                defaults[f.id] = f.default;
-                            });
-                            await chrome.storage.local.set({ [sk]: defaults });
-                        }
-                        // Strip code and config from metadata
-                        const stripped = { ...p };
-                        delete stripped.config;
-                        if (stripped.contentScripts) {
-                            stripped.contentScripts = stripped.contentScripts.map(cs => {
-                                const { code, ...rest } = cs;
-                                return rest;
-                            });
-                        }
-                        if (stripped.commands) {
-                            stripped.commandNames = Object.keys(stripped.commands);
-                            delete stripped.commands;
-                        }
-                        strippedImported.push(stripped);
-                    } else {
-                        strippedImported.push(p);
-                    }
-                }
-
-                let newPlugins;
-                let newEnabledStates;
-                if (action) {
-                    newPlugins = [...plugins];
-                    strippedImported.forEach(p => {
-                        const idx = newPlugins.findIndex(existing => existing.id === p.id);
-                        if (idx > -1) newPlugins[idx] = p;
-                        else newPlugins.push(p);
-                    });
-                    newEnabledStates = { ...enabledStates };
-                    strippedImported.forEach(p => {
-                        if (p.type !== 'plugin') return;
-                        if (importedEnabledStates[p.id] !== undefined) newEnabledStates[p.id] = !!importedEnabledStates[p.id];
-                        else if (newEnabledStates[p.id] === undefined) newEnabledStates[p.id] = true;
-                    });
-                } else {
-                    newPlugins = strippedImported;
-                    newEnabledStates = {};
-                    strippedImported.forEach(p => {
-                        if (p.type !== 'plugin') return;
-                        newEnabledStates[p.id] = importedEnabledStates[p.id] !== undefined ? !!importedEnabledStates[p.id] : true;
-                    });
-                }
-                enabledStates = newEnabledStates;
-                await savePlugins(newPlugins);
-                // Sync all scripts to disk after import
-                try {
-                    await syncAllPluginScripts();
-                } catch (e) {
-                    console.warn('Script file sync failed after import:', e);
-                }
-                alert('Import successful!');
-            } catch (e) { alert('Import failed: ' + e.message); }
-        };
-        reader.readAsText(file);
     };
 
     document.getElementById('import-zip-file').onchange = async (e) => {
@@ -1082,14 +759,11 @@ document.addEventListener("DOMContentLoaded", async () => {
                         const filename = `${idSafe}_cs_${i}.js`;
                         const zipName = `plugin_scripts/${filename}`;
                         const scriptData = zipEntries.get(zipName);
-                        if (!scriptData) continue;
+                        if (!scriptData) {
+                            throw new Error(`ZIP is missing required script: ${zipName}`);
+                        }
                         const code = utf8Decode(scriptData);
                         codeToStore[`plugin_code_${idSafe}_cs_${i}`] = code;
-                        try {
-                            if (!(await scriptFileExists(filename))) {
-                                await writePluginScript(filename, code);
-                            }
-                        } catch (_) {}
                     }
                 }
 
@@ -1097,14 +771,11 @@ document.addEventListener("DOMContentLoaded", async () => {
                     const filename = `${idSafe}_cmd_${cmd}.js`;
                     const zipName = `plugin_scripts/${filename}`;
                     const scriptData = zipEntries.get(zipName);
-                    if (!scriptData) continue;
+                    if (!scriptData) {
+                        throw new Error(`ZIP is missing required script: ${zipName}`);
+                    }
                     const code = utf8Decode(scriptData);
                     codeToStore[`plugin_code_${idSafe}_cmd_${cmd}`] = code;
-                    try {
-                        if (!(await scriptFileExists(filename))) {
-                            await writePluginScript(filename, code);
-                        }
-                    } catch (_) {}
                 }
 
                 if (Object.keys(codeToStore).length > 0) {
@@ -1164,9 +835,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             enabledStates = newEnabledStates;
             await savePlugins(newPlugins);
-            try {
-                await syncAllPluginScripts();
-            } catch (_) {}
             alert('ZIP import successful!');
         } catch (err) {
             alert('ZIP import failed: ' + err.message);
@@ -1187,11 +855,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (confirm('Are you sure you want to restore default plugins? This will overwrite your current plugin list.')) {
             chrome.runtime.sendMessage({ action: 'restoreDefaults' }, async (response) => {
                 if (response?.success) {
-                    try {
-                        await syncAllPluginScripts();
-                    } catch (e) {
-                        console.warn('Script file sync failed after restore:', e);
-                    }
                     alert('Default plugins restored!');
                     render();
                 }
@@ -1207,35 +870,29 @@ document.addEventListener("DOMContentLoaded", async () => {
         };
     });
 
-    // --- Extension directory setup (one-time) ---
-    const setupBanner = document.getElementById('setup-banner');
-    const dirBtn = document.getElementById('select-ext-dir');
-
-    async function checkDirSetup() {
-        const dir = await getExtensionDir();
-        if (dir) {
-            if (setupBanner) setupBanner.classList.add('hidden');
-            return true;
-        } else {
-            if (setupBanner) setupBanner.classList.remove('hidden');
-            return false;
-        }
-    }
-
-    if (dirBtn) {
-        dirBtn.onclick = async () => {
-            const dir = await pickExtensionDir();
-            if (dir) {
-                if (setupBanner) setupBanner.classList.add('hidden');
-                try {
-                    await syncAllPluginScripts();
-                } catch (e) {
-                    console.warn('Initial sync failed:', e);
-                }
+    document.getElementById('inspect-scripts').onclick = async () => {
+        const { plugins = [] } = await chrome.storage.local.get('plugins');
+        const paths = new Set();
+        for (const p of plugins) {
+            if (p.type !== 'plugin') continue;
+            const idSafe = p.id.replace(/-/g, '_');
+            for (let i = 0; i < (p.contentScripts || []).length; i++) {
+                paths.add(`plugin_scripts/${idSafe}_cs_${i}.js`);
             }
-        };
-    }
-
-    await checkDirSetup();
+            for (const cmd of (p.commandNames || [])) {
+                paths.add(`plugin_scripts/${idSafe}_cmd_${cmd}.js`);
+            }
+        }
+        const lines = Array.from(paths).sort();
+        if (lines.length === 0) {
+            alert('No plugin scripts declared for the current plugin list.');
+            return;
+        }
+        const html = `<!doctype html><html><head><meta charset="utf-8"><title>Bundled Scripts</title></head><body style="font-family:monospace;padding:16px;"><h2>Bundled plugin_scripts/ files</h2><p>These are extension-internal URLs (Chrome does not expose the absolute filesystem path).</p><ul>${lines.map(p => `<li><a href="${chrome.runtime.getURL(p)}" target="_blank" rel="noopener noreferrer">${p}</a></li>`).join('')}</ul></body></html>`;
+        const blob = new Blob([html], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank', 'noopener,noreferrer');
+        setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    };
     render();
 });

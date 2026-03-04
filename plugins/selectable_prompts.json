@@ -1,6 +1,6 @@
 {
   "id": "selectable-prompts",
-  "name": "Selectable Prompts",
+  "name": "Prompts Text Selection",
   "type": "plugin",
   "configSchema": [
     {

@@ -1,6 +1,6 @@
 {
   "id": "delimiter-tooltip",
-  "name": "Delimiter Tooltip",
+  "name": "Delimiter Tooltip Helper",
   "type": "plugin",
   "configSchema": [
     {

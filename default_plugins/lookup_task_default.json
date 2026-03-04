@@ -21,6 +21,6 @@
     "lookup_task"
   ],
   "id": "lookup-task-default",
-  "name": "Lookup Task",
+  "name": "Lookup Task by ID (Default)",
   "type": "plugin"
 }

@@ -73,6 +73,6 @@
     "fuzzy_json_search"
   ],
   "id": "fuzzy-json-search",
-  "name": "Fuzzy JSON Search",
+  "name": "Fuzzy Task JSON Search",
   "type": "plugin"
 }

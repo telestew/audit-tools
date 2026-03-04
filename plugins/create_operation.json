@@ -11,6 +11,6 @@
     "create_operation_from_clipboard"
   ],
   "id": "create-operation",
-  "name": "Create Operation",
+  "name": "Create Operation from Clipboard",
   "type": "plugin"
 }

@@ -5,6 +5,16 @@ chrome.runtime.onInstalled.addListener(async () => {
     }
 });
 
+const DEFAULT_BOOTSTRAP = {
+    pluginFiles: [
+        'hide_external_feedback_default.json',
+        'lookup_task_default.json'
+    ],
+    shortcutMappings: {
+        kb_command_1: 'lookup-task-default:lookup_task'
+    }
+};
+
 function isInjectablePageUrl(url) {
     try {
         const parsed = new URL(url);
@@ -138,16 +148,20 @@ async function loadPackagedScript(path) {
     }
 }
 
-async function savePackagedPluginCode(plugin) {
+async function savePackagedPluginCode(plugin, options = {}) {
+    const packagedBaseDir = options.packagedBaseDir || 'plugin_scripts';
+    const overwrite = !!options.overwrite;
     const pluginIdSafe = plugin.id.replace(/-/g, '_');
     const toStore = {};
 
     if (plugin.contentScripts) {
         for (let i = 0; i < plugin.contentScripts.length; i++) {
             const key = codeKeyCS(plugin.id, i);
-            const existing = await chrome.storage.local.get(key);
-            if (existing[key] !== undefined && existing[key] !== '') continue;
-            const packaged = await loadPackagedScript(`plugin_scripts/${pluginIdSafe}_cs_${i}.js`);
+            if (!overwrite) {
+                const existing = await chrome.storage.local.get(key);
+                if (existing[key] !== undefined && existing[key] !== '') continue;
+            }
+            const packaged = await loadPackagedScript(`${packagedBaseDir}/${pluginIdSafe}_cs_${i}.js`);
             if (packaged !== null) toStore[key] = packaged;
         }
     }
@@ -155,9 +169,11 @@ async function savePackagedPluginCode(plugin) {
     const cmdNames = plugin.commandNames || [];
     for (const cmdName of cmdNames) {
         const key = codeKeyCMD(plugin.id, cmdName);
-        const existing = await chrome.storage.local.get(key);
-        if (existing[key] !== undefined && existing[key] !== '') continue;
-        const packaged = await loadPackagedScript(`plugin_scripts/${pluginIdSafe}_cmd_${cmdName}.js`);
+        if (!overwrite) {
+            const existing = await chrome.storage.local.get(key);
+            if (existing[key] !== undefined && existing[key] !== '') continue;
+        }
+        const packaged = await loadPackagedScript(`${packagedBaseDir}/${pluginIdSafe}_cmd_${cmdName}.js`);
         if (packaged !== null) toStore[key] = packaged;
     }
 
@@ -167,14 +183,14 @@ async function savePackagedPluginCode(plugin) {
 }
 
 // Save plugin with separated code storage — call this for new/imported plugins
-async function savePluginFull(plugin) {
+async function savePluginFull(plugin, options = {}) {
     await savePluginCode(plugin);
-    await savePackagedPluginCode(plugin);
+    await savePackagedPluginCode(plugin, options);
     // Set initial settings from schema defaults if not already stored
     if (plugin.configSchema) {
         const sk = settingsKey(plugin.id);
         const existing = await chrome.storage.local.get(sk);
-        if (!existing[sk]) {
+        if (!existing[sk] || options.resetSettings) {
             const defaults = {};
             plugin.configSchema.forEach(f => {
                 if (f.default !== undefined) defaults[f.id] = f.default;
@@ -185,19 +201,14 @@ async function savePluginFull(plugin) {
 }
 
 async function restoreDefaultPlugins() {
-    const defaultFiles = [
-        'hide_external_feedback.json',
-        'lookup_task.json'
-    ];
-
     const plugins = [];
     const pluginEnabledStates = {};
-    for (const file of defaultFiles) {
+    for (const file of DEFAULT_BOOTSTRAP.pluginFiles) {
         try {
             const response = await fetch(chrome.runtime.getURL(`default_plugins/${file}`));
             const data = await response.json();
             // Save code blobs separately and initial settings
-            await savePluginFull(data);
+            await savePluginFull(data, { packagedBaseDir: 'default_plugin_scripts', overwrite: true, resetSettings: true });
             // Store stripped metadata
             const stripped = stripCodeFromPlugin(data);
             if (stripped.type === 'plugin') {
@@ -209,9 +220,8 @@ async function restoreDefaultPlugins() {
         }
     }
 
-    // Set default shortcut for lookup_task
     const { shortcutMappings = {} } = await chrome.storage.local.get('shortcutMappings');
-    shortcutMappings['kb_command_1'] = 'lookup-task-default:lookup_task';
+    Object.assign(shortcutMappings, DEFAULT_BOOTSTRAP.shortcutMappings);
 
     await chrome.storage.local.set({ plugins, shortcutMappings, pluginEnabledStates });
 }

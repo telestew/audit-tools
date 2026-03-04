@@ -25,6 +25,6 @@
     "lookup_attempt"
   ],
   "id": "lookup-attempt",
-  "name": "Lookup Attempt",
+  "name": "Lookup Attempt by Task ID",
   "type": "plugin"
 }

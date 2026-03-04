@@ -1,6 +1,6 @@
 {
   "id": "desmos-ai-chat",
-  "name": "Desmos AI Chat",
+  "name": "Desmos Chat Assistant",
   "type": "plugin",
   "configSchema": [
     {
