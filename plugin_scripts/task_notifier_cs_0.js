@@ -21,6 +21,19 @@
     };
     window[STATE_KEY] = state;
 
+    const readLatestEnabled = async () => {
+      try {
+        if (bridge && storageKey) {
+          const resp = await bridge('storage.get', { keys: [storageKey] });
+          const latest = resp?.result?.[storageKey];
+          if (latest && typeof latest === 'object') {
+            return !!latest.enabled;
+          }
+        }
+      } catch (_) {}
+      return !!state.config?.enabled;
+    };
+
     const config = {
       enabled: !!pluginSettings?.enabled,
       period: Number(pluginSettings?.period) || 10,
@@ -70,6 +83,10 @@
 
     const tick = async () => {
       if (!state.running) return;
+      if (!(await readLatestEnabled())) {
+        stop();
+        return;
+      }
 
       const now = Date.now();
       const sinceLast = now - state.lastRequestAt;
